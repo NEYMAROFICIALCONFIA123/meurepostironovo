@@ -1,0 +1,20 @@
+name: Validate game
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  game:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check web/game.js && node tools/test-game.cjs
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.5.1
+          use-dotnet: false
+          include-templates: false
+      - name: Import Godot project
+        run: godot --headless --path godot --editor --import --quit
+      - name: Run scene smoke test
+        run: godot --headless --path godot --quit-after 120
