@@ -1,0 +1,861 @@
+extends Node2D
+## LAST BREATH: projected 2.5D geometry with pixel-art sprites and 2D collision.
+const ARENA := Rect2(280, 326, 400, 162)
+const WHITE := Color("e6e6e9")
+const GOLD := Color("efbb77")
+const CYAN := Color("69e7f0")
+const RED := Color("ff536b")
+var font: Font = ThemeDB.fallback_font
+var mode := "title"
+var before_pause := "attack"
+var elapsed := 0.0
+var clock := 0.0
+var wave := 0
+var hits := 0
+var hp := 92
+var pies := 3
+var selected := 0
+var soul := Vector2(480, 410)
+var velocity := 0.0
+var gravity := false
+var immunity := 0.0
+var spawn_count := 0
+var hazards: Array[Dictionary] = []
+var sparks: Array[Dictionary] = []
+var message := "é um belo dia lá fora."
+var message_time := 0.0
+var cursor := 0.0
+var practice := false
+var muted := false
+var music_player: AudioStreamPlayer
+var music_bus := 0
+var voice_player: AudioStreamPlayer
+var voice_key := ""
+var multiverse_scene: Node2D
+
+func _ready() -> void:
+	voice_player = AudioStreamPlayer.new()
+	add_child(voice_player)
+	multiverse_scene = preload("res://multiverse.gd").new()
+	multiverse_scene.set("host",self)
+	add_child(multiverse_scene)
+	RenderingServer.set_default_clear_color(Color("05070d"))
+	music_player = AudioStreamPlayer.new()
+	var track := load("res://assets/determination.wav") as AudioStreamWAV
+	if track:
+		track.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		track.loop_end = int(track.get_length() * track.mix_rate)
+		music_player.stream = track
+		music_player.volume_db = -12
+		add_child(music_player)
+	queue_redraw()
+
+func r(x: float, y: float, w: float, h: float, color: Color) -> void:
+	draw_rect(Rect2(roundf(x), roundf(y), roundf(w), roundf(h)), color)
+
+func label(s: String, x: float, y: float, size: int = 16, color: Color = WHITE, centered: bool = false) -> void:
+	var offset := font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x * 0.5 if centered else 0.0
+	draw_string(font, Vector2(x - offset, y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+
+func heart(pos: Vector2, color: Color, scale_factor: float = 2.0) -> void:
+	var rows := ["0110110", "1111111", "1111111", "0111110", "0011100", "0001000"]
+	for j in range(rows.size()):
+		for i in range(7):
+			if rows[j][i] == "1":
+				r(pos.x + (i - 3.5) * scale_factor, pos.y + (j - 3) * scale_factor, scale_factor, scale_factor, color)
+
+func skull(pos: Vector2, s: float = 2.6, glowing: bool = false) -> void:
+	var pieces := [Rect2(-12,-17,24,3), Rect2(-16,-14,32,6), Rect2(-18,-8,36,15), Rect2(-15,7,30,7), Rect2(-11,14,22,3)]
+	for piece in pieces:
+		draw_rect(Rect2(pos + piece.position * s, piece.size * s), WHITE)
+	for piece in [Rect2(-14,-5,11,8), Rect2(4,-5,10,8), Rect2(-2,4,3,4), Rect2(-12,8,25,2)]:
+		draw_rect(Rect2(pos + piece.position * s, piece.size * s), Color("151522"))
+	if glowing:
+		draw_rect(Rect2(pos + Vector2(7,-4)*s, Vector2(5,5)*s), CYAN)
+	for i in range(-8, 10, 5):
+		draw_rect(Rect2(pos + Vector2(i,9)*s, Vector2(1,4)*s), Color("343845"))
+
+func sans() -> void:
+	var y := 180 + sin(clock * 2) * 2
+	r(443,y+69,29,43,Color("171b2a"))
+	r(488,y+69,29,43,Color("171b2a"))
+	r(432,y+107,45,15,Color("b8bdcf"))
+	r(483,y+107,45,15,Color("b8bdcf"))
+	r(430,y+120,49,6,Color("f0dbe7"))
+	r(483,y+120,49,6,Color("f0dbe7"))
+	r(430,y+22,100,63,Color("376aa6"))
+	r(423,y+32,19,44,Color("528bc3"))
+	r(520,y+32,19,44,Color("528bc3"))
+	r(437,y+18,86,16,Color("a9c7e0"))
+	r(454,y+26,52,60,Color("e0e4e9"))
+	r(443,y+37,19,44,Color("407cb8"))
+	r(501,y+37,19,44,Color("407cb8"))
+	r(475,y+37,5,44,Color("9da9b8"))
+	r(428,y+70,24,13,WHITE)
+	r(511,y+70,24,13,WHITE)
+	r(440,y+81,81,13,Color("202535"))
+	r(425,y+36,6,32,Color("79b4d9"))
+	r(526,y+36,6,32,Color("244269"))
+	r(443,y+44,15,5,Color("254d7a"))
+	r(503,y+44,15,5,Color("254d7a"))
+	r(449,y+89,5,21,Color("394359"))
+	r(490,y+89,5,21,Color("394359"))
+	skull(Vector2(480, y-18), 2.6, gravity or wave >= 4)
+
+# Perspective-projected world coordinates; sprites and collision remain on a 2D plane.
+func project_25(p: Vector3) -> Vector2:
+	var pointer := get_global_mouse_position() / Vector2(960,600) - Vector2(0.5,0.5)
+	return Vector2(480+(p.x-pointer.x*7)*470/p.z,111+(119-p.y+pointer.y*3)*470/p.z).round()
+
+func face_25(points: Array, color: Color) -> void:
+	var screen := PackedVector2Array()
+	for p: Vector3 in points:
+		screen.append(project_25(p))
+	draw_colored_polygon(screen,color)
+
+func block_25(x: float, y: float, z: float, w: float, h: float, d: float, front: Color, side: Color, top: Color) -> void:
+	face_25([Vector3(x,y,z),Vector3(x+w,y,z),Vector3(x+w,y+h,z),Vector3(x,y+h,z)],front)
+	face_25([Vector3(x+w,y,z),Vector3(x+w,y,z+d),Vector3(x+w,y+h,z+d),Vector3(x+w,y+h,z)],side)
+	face_25([Vector3(x,y,z+d),Vector3(x,y,z),Vector3(x,y+h,z),Vector3(x,y+h,z+d)],side)
+	face_25([Vector3(x,y+h,z),Vector3(x+w,y+h,z),Vector3(x+w,y+h,z+d),Vector3(x,y+h,z+d)],top)
+
+func corridor() -> void:
+	r(0,0,960,600,Color("060914"))
+	r(0,0,960,324,Color("15182b"))
+	var arch_colors := ["39334d","191b32","51445f","202039","6c5266","27253e","a57979"]
+	for i in range(7):
+		var inset := i*11
+		r(320+inset,-60+inset,320-inset*2,248-inset,Color(arch_colors[i]))
+	r(399,17,162,156,Color("302b47"))
+	r(409,25,142,141,Color("b3777e"))
+	r(418,32,124,128,Color("e4aa89"))
+	var glass := ["dca187","b37b87","775b83","dfb58e","8c7199"]
+	for row in range(7):
+		for col in range(7):
+			r(427+col*15,40+row*16,13,14,Color(glass[(col+row*2)%5]))
+	r(477,25,6,140,Color("41364c"))
+	r(409,93,142,5,Color("41364c"))
+	for z in range(1800,149,-90):
+		for x in range(-720,720,90):
+			var tile_color := Color("282839") if (int(x/90.0)+int(z/90.0))%2==0 else Color("1b2031")
+			face_25([Vector3(x,0,z),Vector3(x+88,0,z),Vector3(x+88,0,z+88),Vector3(x,0,z+88)],tile_color)
+	for z in range(1000,239,-25):
+		var point := project_25(Vector3(0,0.5,z))
+		var w := 70.0*470/z
+		r(point.x-w/2+sin(z*0.17)*5,point.y,w,2,Color("e9ba8b18"))
+	draw_colored_polygon(PackedVector2Array([Vector2(418,65),Vector2(443,70),Vector2(320,324),Vector2(150,324)]),Color("b9876b13"))
+	draw_colored_polygon(PackedVector2Array([Vector2(491,46),Vector2(522,50),Vector2(788,324),Vector2(547,324)]),Color("b9baf11a"))
+	for z: int in [1100,820,580,390,255]:
+		for side: int in [-1,1]:
+			var x := side*255-21
+			block_25(x-15,0,z-10,72,8,55,Color("534155"),Color("252239"),Color("827087"))
+			block_25(x-9,8,z-6,60,10,47,Color("44374e"),Color("211e32"),Color("6f5970"))
+			block_25(x,18,z,42,205,36,Color("49415b"),Color("23263d"),Color("736780"))
+			block_25(x+5,20,z-0.4,5,197,1,Color("8e7284"),Color("55445f"),Color("ae8a91"))
+			block_25(x+30,20,z-0.5,5,197,1,Color("2d2b44"),Color("22253d"),Color("64506c"))
+			block_25(x-7,219,z-5,56,9,46,Color("65516b"),Color("30273f"),Color("9b7e87"))
+			block_25(x-14,228,z-9,70,10,53,Color("70586f"),Color("30273e"),Color("ad8590"))
+			var point := project_25(Vector3(x+20,117,z-4))
+			var s := 470.0/z
+			r(point.x-3*s,point.y,6*s,14*s,Color("6e5064"))
+			r(point.x-2*s,point.y-6*s,4*s,9*s,Color("f5c79a"))
+	# Elliptical contact shadow pins the sprite to the projected floor.
+	var shadow := PackedVector2Array()
+	for i in range(32):
+		shadow.append(Vector2(480+cos(i*TAU/32)*76,318+sin(i*TAU/32)*12))
+	draw_colored_polygon(shadow,Color("03071699"))
+	sans()
+	for i in range(56):
+		var x := fposmod(i*131.71+sin(clock*0.23+i)*12,960)
+		var y := fposmod(i*59.3-clock*(3+i%5),320)
+		r(x,y,2 if i%7==0 else 1,2 if i%7==0 else 1,Color("f8d2aa70") if i%3==0 else Color("9aaada44"))
+	# Opaque lower UI plane hides foreground projection beyond the stage.
+	r(0,324,960,276,Color("060914"))
+
+func arena_25() -> void:
+	draw_colored_polygon(PackedVector2Array([Vector2(277,323),Vector2(683,323),Vector2(699,308),Vector2(261,308)]),Color("43445e"))
+	draw_colored_polygon(PackedVector2Array([Vector2(261,308),Vector2(277,323),Vector2(277,491),Vector2(261,475)]),Color("191f34"))
+	draw_colored_polygon(PackedVector2Array([Vector2(683,323),Vector2(699,308),Vector2(699,475),Vector2(683,491)]),Color("10182c"))
+	draw_colored_polygon(PackedVector2Array([Vector2(277,491),Vector2(683,491),Vector2(699,505),Vector2(261,505)]),Color("141d30"))
+	r(263,309,434,2,Color("9b849d"))
+	for p: Vector2 in [Vector2(265,313),Vector2(688,313),Vector2(265,481),Vector2(688,481)]:
+		r(p.x,p.y,7,7,Color("a597ab"))
+		r(p.x+2,p.y+2,3,3,Color("292e44"))
+
+func bone(x: float, y: float, h: float, color: Color = WHITE) -> void:
+	if h <= 0:
+		return
+	r(x-3,y,6,h,color)
+	r(x-6,y-3,5,7,color)
+	r(x+1,y-3,5,7,color)
+	r(x-6,y+h-4,5,7,color)
+	r(x+1,y+h-4,5,7,color)
+
+func say(s: String) -> void:
+	message = s
+	message_time = 2.5
+
+func start() -> void:
+	voice_player.stop()
+	music_player.pitch_scale = 1.0
+	fp_position = Vector2(0,680)
+	fp_yaw = 0
+	fp_pitch = 0
+	fp_flight = 0
+	mode = "attack"
+	wave = 0
+	hits = 0
+	hp = 92
+	pies = 3
+	elapsed = 0
+	spawn_count = 0
+	immunity = 1
+	gravity = false
+	velocity = 0
+	soul = Vector2(480,410)
+	hazards.clear()
+	say("tu vai ter um mau momento.")
+	if music_player.stream and not music_player.playing:
+		music_player.play()
+
+func next_wave() -> void:
+	wave += 1
+	elapsed = 0
+	spawn_count = 0
+	hazards.clear()
+	gravity = wave % 3 == 1
+	velocity = 0
+	soul = Vector2(480,478 if gravity else 410)
+	immunity = 1
+	mode = "attack"
+	say("gravidade. engraçado, né?" if gravity else "continua tentando.")
+
+func confirm() -> void:
+	if mode=="multiverse":
+		multiverse_scene.call("advance")
+		return
+	if mode.begins_with("dr_"):
+		cyber_confirm()
+		return
+	if mode=="escape_win":
+		multiverse_scene.call("begin")
+		return
+	match mode:
+		"title", "dead", "win", "escape_win": start()
+		"paused": toggle_pause()
+		"aim":
+			if absf(cursor-0.5)<0.35:
+				hits += 1
+			burst(Vector2(480,200),GOLD,25)
+			if hits >= 8:
+				mode = "win"
+				hazards.clear()
+			else:
+				next_wave()
+				say("... heh. quase." if absf(cursor-0.5)<0.18 else "errou o tempo. tente o centro.")
+		"menu":
+			if selected == 0:
+				mode = "aim"
+				elapsed = 0
+			elif selected == 2:
+				if pies > 0:
+					pies -= 1
+					hp = mini(92,hp+38)
+					next_wave()
+					say("torta de canela. +38 HP")
+				else:
+					next_wave()
+					say("sem itens. mantenha-se firme.")
+			else:
+				next_wave()
+				say("ossos azuis: fique parado." if selected == 1 else "você escolheu continuar.")
+
+func toggle_pause() -> void:
+	if mode == "paused":
+		mode = before_pause
+	elif mode in ["attack","menu","aim","fps","throw","explosion","multiverse","dr_intro","dr_attack","dr_menu"]:
+		before_pause = mode
+		mode = "paused"
+	music_player.stream_paused = mode == "paused"
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	match event.keycode:
+		KEY_E: toggle_first_person()
+		KEY_SPACE:
+			if mode=="dr_attack": cyber_shoot()
+			else: toss_sans()
+		KEY_ENTER, KEY_Z: confirm()
+		KEY_ESCAPE: toggle_pause()
+		KEY_X:
+			if mode == "aim": mode = "menu"
+		KEY_M:
+			muted = not muted
+			music_player.volume_db = -80 if muted else -12
+		KEY_T:
+			practice = not practice
+		KEY_F:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		KEY_RIGHT, KEY_D:
+			if mode == "menu": selected = (selected+1)%4
+			elif mode=="dr_menu": cyber_selected = (cyber_selected+1)%4
+		KEY_LEFT, KEY_A:
+			if mode == "menu": selected = (selected+3)%4
+			elif mode=="dr_menu": cyber_selected = (cyber_selected+3)%4
+
+func burst(pos: Vector2, color: Color, count: int) -> void:
+	for i in range(count):
+		sparks.append({"p":pos,"v":Vector2(randf_range(-120,120),randf_range(-120,120)),"life":randf_range(0.4,1),"c":color})
+
+func hurt() -> void:
+	if immunity > 0 or practice:
+		return
+	hp = maxi(0,hp-5)
+	immunity = 0.55
+	burst(soul,RED,12)
+	if hp == 0:
+		mode = "dead"
+		hazards.clear()
+		burst(soul,RED,45)
+
+func spawn_hazard() -> void:
+	match wave%4:
+		0:
+			hazards.append({"kind":"gate","x":700.0,"y":326.0,"gap":364+(sin(spawn_count*0.8)+1)*38,"blue":spawn_count%4==2})
+		1:
+			var h := 62 if spawn_count%3==0 else 30
+			hazards.append({"kind":"bone","x":700.0,"y":488.0-h,"h":h})
+		2:
+			hazards.append({"kind":"laser","x":310.0+spawn_count*97%340,"y":356.0+spawn_count*43%100,"timer":0.0,"horizontal":spawn_count%3==0})
+		3:
+			hazards.append({"kind":"fall","x":298.0+spawn_count*83%360,"y":270.0,"h":36})
+			if spawn_count%3==0:
+				hazards.append({"kind":"laser","x":soul.x,"y":soul.y,"timer":0.0,"horizontal":false})
+	spawn_count += 1
+
+func _process(delta: float) -> void:
+	voice_player.stream_paused = mode=="paused"
+	voice_player.volume_db = -80 if muted else 0
+	music_player.volume_db = -80 if muted else (-28 if voice_player.playing else -12)
+	var dt := minf(delta,0.033)
+	if mode=="multiverse":
+		queue_redraw()
+		return
+	if process_crossover(dt): return
+	if process_first_person(dt): return
+	if mode == "paused":
+		queue_redraw()
+		return
+	clock += dt
+	message_time -= dt
+	for p in sparks:
+		p.p += p.v * dt
+		p.life -= dt
+	sparks = sparks.filter(func(p: Dictionary) -> bool: return p.life > 0)
+	if mode == "aim":
+		elapsed += dt
+		cursor = (sin(elapsed*3.5-PI/2)+1)/2
+	if mode != "attack":
+		queue_redraw()
+		return
+	elapsed += dt
+	immunity = maxf(0,immunity-dt)
+	var dx := float(int(Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A)))
+	var dy := float(int(Input.is_physical_key_pressed(KEY_DOWN) or Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_UP) or Input.is_physical_key_pressed(KEY_W)))
+	var speed := 110.0 if Input.is_physical_key_pressed(KEY_SHIFT) else 205.0
+	var moving := dx != 0 or dy != 0 or absf(velocity)>12
+	if gravity:
+		if (Input.is_physical_key_pressed(KEY_UP) or Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_SPACE)) and soul.y >= 478:
+			velocity = -345
+		velocity += 940*dt
+		soul += Vector2(dx*speed,velocity)*dt
+		if soul.y > 479:
+			soul.y = 479
+			velocity = 0
+	else:
+		soul += Vector2(dx,dy).normalized()*speed*dt
+	soul = soul.clamp(ARENA.position+Vector2(9,9),ARENA.end-Vector2(9,9))
+	var interval := 1.15 if wave%4==2 else 0.78
+	if elapsed > 1 and elapsed > (spawn_count+1)*interval:
+		spawn_hazard()
+	# Iterate a copy: a lethal collision clears the live list.
+	for h in hazards.duplicate():
+		match h.kind:
+			"gate":
+				h.x -= (125+wave*9)*dt
+				if absf(soul.x-h.x)<11 and absf(soul.y-h.gap)>30 and (not h.blue or moving): hurt()
+			"bone":
+				h.x -= (160+wave*8)*dt
+				if absf(soul.x-h.x)<11 and soul.y>h.y-7: hurt()
+			"fall":
+				h.y += (120+wave*10)*dt
+				if absf(soul.x-h.x)<11 and soul.y>h.y-8 and soul.y<h.y+h.h+8: hurt()
+			"laser":
+				h.timer += dt
+				var dist: float = absf(soul.y-h.y) if h.horizontal else absf(soul.x-h.x)
+				if h.timer>1 and h.timer<1.48 and dist<17: hurt()
+	hazards = hazards.filter(func(h: Dictionary) -> bool: return h.timer<1.7 if h.kind=="laser" else h.x>245 and h.y<558)
+	if mode == "attack" and elapsed>11:
+		mode = "menu"
+		selected = 0
+		hazards.clear()
+		say("os ossos se aquietam. sua vez.")
+	queue_redraw()
+
+func draw_hazards() -> void:
+	for h in hazards:
+		match h.kind:
+			"gate":
+				var color: Color = CYAN if h.blue else WHITE
+				bone(h.x,329,h.gap-35-329,color)
+				bone(h.x,h.gap+35,485-h.gap-35,color)
+			"bone", "fall":
+				var y := maxf(329,h.y)
+				bone(h.x,y,minf(h.h-(y-h.y),485-y))
+			"laser":
+				if h.timer<1:
+					if h.horizontal: r(283,h.y,394,2,RED)
+					else: r(h.x,329,2,156,RED)
+				elif h.timer<1.48:
+					if h.horizontal:
+						r(283,h.y-11,394,22,CYAN)
+						r(283,h.y-5,394,10,WHITE)
+					else:
+						r(h.x-11,329,22,156,CYAN)
+						r(h.x-5,329,10,156,WHITE)
+				if h.timer<1.48: skull(Vector2(254,h.y) if h.horizontal else Vector2(h.x,299),0.8,true)
+
+func _draw() -> void:
+	if mode=="multiverse" or (mode=="paused" and before_pause=="multiverse"): return
+	if draw_crossover(): return
+	if draw_first_person(): return
+	corridor()
+	if mode == "title":
+		r(170,335,620,230,Color("090c14ee"))
+		label("LAST BREATH",480,387,48,GOLD,true)
+		label("UM ENCONTRO COM SANS · 2.5D",480,417,13,WHITE,true)
+		label("[ ENTER ]  ENCARAR O SANS",480,469,21,WHITE,true)
+		label("WASD / SETAS: MOVER   Z: CONFIRMAR   ESC: PAUSAR",480,514,12,Color("858d9e"),true)
+		label("E: SAIR DA CAIXA / PRIMEIRA PESSOA · T: TREINO · M: SOM",480,538,12,CYAN,true)
+		return
+	label("TURNO %02d" % (wave+1),75,347,11,Color("6d7688"))
+	label("ALMA AZUL" if gravity else "ALMA VERMELHA",742,347,11,CYAN if gravity else RED)
+	label("%d / 8" % hits,795,369,12,Color("6d7688"))
+	arena_25()
+	r(277,323,406,168,Color("b9c3d6"))
+	r(280,326,400,162,Color("030509"))
+	if mode == "attack" or (mode == "paused" and before_pause == "attack"):
+		draw_hazards()
+		if immunity<=0 or int(clock*16)%2==0: heart(soul,Color("4c9cff") if gravity else RED,2.2)
+		r(280,500,400,2,Color("242735"))
+		r(280,500,400*minf(1,elapsed/11),2,CYAN if gravity else GOLD)
+	elif mode == "menu":
+		label("* você ainda está aqui.",304,365,20)
+		label("* o que você vai fazer?",304,398,20)
+		var tips := ["Ataque no centro. Sans vai desviar.","Ossos azuis: não se mova.","TORTA DE CANELA ×%d / +38 HP" % pies,"Às vezes, sobreviver é uma escolha."]
+		label(tips[selected],304,455,13,Color("8c96a9"))
+	elif mode == "aim":
+		label("ACERTE O CENTRO",480,359,14,WHITE,true)
+		for i in range(31):
+			r(310+i*11,391,8,50,GOLD if i>12 and i<18 else Color("9c5f6b"))
+		r(310+cursor*340,381,4,70,WHITE)
+		label("Z / ENTER",480,474,12,WHITE,true)
+	elif mode in ["dead","win"]:
+		label("GAME OVER" if mode=="dead" else "DETERMINAÇÃO.",480,388,32,RED if mode=="dead" else GOLD,true)
+		label("não desista. você pode tentar de novo." if mode=="dead" else "sans sorri. por hoje, é o suficiente.",480,425,14,WHITE,true)
+		label("ENTER PARA RECOMEÇAR",480,466,13,WHITE,true)
+	label("FRISK",157,538,19)
+	label("LV 19",249,538,19)
+	label("HP",379,538,14)
+	r(412,523,126,17,Color("5b2333"))
+	r(412,523,126*float(hp)/92,17,Color("f0cc59"))
+	label("%02d / 92" % hp,552,538,19)
+	label("TREINO" if practice else "KR",732,538,13,CYAN)
+	var options := ["LUTAR","AGIR","ITEM","POUPAR"]
+	for i in range(4):
+		var x := 157+i*165
+		var active := mode=="menu" and selected==i
+		r(x,557,151,35,GOLD if active else Color("a37347"))
+		r(x+2,559,147,31,Color("32251d") if active else Color("090b10"))
+		if active: heart(Vector2(x+17,575),RED,1.4)
+		label(options[i],x+83,582,20,GOLD,true)
+	for p in sparks: r(p.p.x,p.p.y,3,3,p.c)
+	if mode=="paused":
+		r(0,0,960,600,Color("060910ee"))
+		label("PAUSADO",480,267,40,GOLD,true)
+		label("respire. você ainda está aqui.",480,314,18,WHITE,true)
+		label("ENTER / ESC PARA CONTINUAR",480,364,17,WHITE,true)
+
+
+# Movable first-person camera and an alternate, physics-styled ending.
+var fp_position := Vector2(0,680)
+var fp_yaw := 0.0
+var fp_pitch := 0.0
+var fp_flight := 0.0
+var fp_return := "attack"
+
+func toggle_first_person() -> void:
+	if mode.begins_with("dr_"):
+		say("TELETRANSPORTE BLOQUEADO PELO SPAMTON!")
+		if not voice_player.playing: play_voice("locked")
+		return
+	if mode in ["attack","menu","aim"]:
+		fp_return = mode
+		mode = "fps"
+		say("... ei. você não pode sair da caixa.")
+	elif mode == "fps":
+		mode = fp_return
+		immunity = 1
+
+func play_voice(key: String) -> void:
+	voice_key = key
+	voice_player.stop()
+	voice_player.stream = load("res://assets/voices/"+key+".ogg")
+	voice_player.play()
+
+func toss_sans() -> void:
+	if mode != "fps": return
+	var delta := Vector2(0,300)-fp_position
+	if delta.length()>195 or delta.normalized().dot(Vector2(sin(fp_yaw),-cos(fp_yaw)))<0.8:
+		say("chegue perto e olhe para o Sans.")
+		return
+	mode = "throw"
+	play_voice("script")
+	fp_flight = 0
+	say("ISSO NÃO ESTÁ NO ROTEIRO!")
+
+func _input(event: InputEvent) -> void:
+	if mode == "fps" and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		fp_yaw += event.relative.x*0.004
+		fp_pitch = clampf(fp_pitch-event.relative.y*0.6,-100,100)
+	if mode == "fps" and event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:
+		toss_sans()
+
+func process_first_person(dt: float) -> bool:
+	if mode not in ["fps","throw","explosion","escape_win"]: return false
+	clock += dt
+	message_time -= dt
+	if mode == "fps":
+		var forward := float(int(Input.is_physical_key_pressed(KEY_W))-int(Input.is_physical_key_pressed(KEY_S)))
+		var side := float(int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A)))
+		fp_yaw += (int(Input.is_physical_key_pressed(KEY_RIGHT))-int(Input.is_physical_key_pressed(KEY_LEFT)))*dt*1.8
+		fp_pitch = clampf(fp_pitch-(int(Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_UP)))*dt*100,-100,100)
+		var direction := Vector2(sin(fp_yaw)*forward+cos(fp_yaw)*side,-cos(fp_yaw)*forward+sin(fp_yaw)*side).normalized()
+		fp_position += direction*(290 if Input.is_physical_key_pressed(KEY_SHIFT) else 190)*dt
+		fp_position = fp_position.clamp(Vector2(-190,130),Vector2(190,1300))
+	elif mode == "throw":
+		fp_flight += dt
+		if fp_flight>=1.2:
+			fp_flight = 1.2
+			mode = "explosion"
+			impact_time = 0
+			var impact := fp_camera(Vector3(0,75,40))
+			burst(fp_project(impact),GOLD,85)
+	elif mode=="explosion":
+		impact_time += dt
+		for p in sparks:
+			p.p += p.v*dt
+			p.life -= dt
+		if impact_time>1.7:
+			hazards.clear()
+			hits = 8
+			multiverse_scene.call("begin")
+	queue_redraw()
+	return true
+
+func fp_camera(p: Vector3) -> Vector3:
+	var dx := p.x-fp_position.x
+	var dz := p.z-fp_position.y
+	return Vector3(dx*cos(fp_yaw)+dz*sin(fp_yaw),p.y,dx*sin(fp_yaw)-dz*cos(fp_yaw))
+
+func fp_project(p: Vector3) -> Vector2:
+	return Vector2(480+p.x*470/p.z,300+(100-p.y)*470/p.z+fp_pitch)
+
+func fp_face(points: Array, color: Color) -> void:
+	var input: Array[Vector3] = []
+	var clipped: Array[Vector3] = []
+	for p: Vector3 in points: input.append(fp_camera(p))
+	for i in range(input.size()):
+		var a := input[i]
+		var b := input[(i+1)%input.size()]
+		var inside := a.z>=12
+		var next_inside := b.z>=12
+		if inside: clipped.append(a)
+		if inside!=next_inside:
+			clipped.append(a.lerp(b,(12-a.z)/(b.z-a.z)))
+	if clipped.size()<3: return
+	var screen := PackedVector2Array()
+	for p: Vector3 in clipped: screen.append(fp_project(p))
+	draw_colored_polygon(screen,color)
+
+func fp_block(x: float, z: float, w: float, h: float, d: float) -> void:
+	fp_face([Vector3(x,0,z),Vector3(x+w,0,z),Vector3(x+w,h,z),Vector3(x,h,z)],Color("544460"))
+	fp_face([Vector3(x,0,z+d),Vector3(x+w,0,z+d),Vector3(x+w,h,z+d),Vector3(x,h,z+d)],Color("302a43"))
+	fp_face([Vector3(x,0,z),Vector3(x,0,z+d),Vector3(x,h,z+d),Vector3(x,h,z)],Color("28263d"))
+	fp_face([Vector3(x+w,0,z),Vector3(x+w,0,z+d),Vector3(x+w,h,z+d),Vector3(x+w,h,z)],Color("797086"))
+	fp_face([Vector3(x,h,z),Vector3(x+w,h,z),Vector3(x+w,h,z+d),Vector3(x,h,z+d)],Color("9c7b8e"))
+
+func draw_first_person() -> bool:
+	if mode not in ["fps","throw","explosion","escape_win"] and not (mode=="paused" and before_pause in ["fps","throw","explosion"]): return false
+	r(0,0,960,600,Color("121725"))
+	var tiles: Array[Dictionary] = []
+	for z in range(0,1500,90):
+		for x in range(-450,450,90):
+			tiles.append({"x":x,"z":z,"dist":Vector2(x,z).distance_to(fp_position)})
+	tiles.sort_custom(func(a: Dictionary,b: Dictionary) -> bool: return a.dist>b.dist)
+	for tile in tiles:
+		var x: float = tile.x
+		var z: float = tile.z
+		fp_face([Vector3(x,0,z),Vector3(x+88,0,z),Vector3(x+88,0,z+88),Vector3(x,0,z+88)],Color("1a2031") if (int(x/90)+int(z/90))%2 else Color("303044"))
+	fp_face([Vector3(-320,0,0),Vector3(320,0,0),Vector3(320,320,0),Vector3(-320,320,0)],Color("2e293f"))
+	fp_face([Vector3(-88,25,1),Vector3(88,25,1),Vector3(88,270,1),Vector3(-88,270,1)],Color("c79691"))
+	for row in range(8):
+		for col in range(6):
+			var x := -82+col*28
+			var y := 34+row*28
+			fp_face([Vector3(x,y,2),Vector3(x+25,y,2),Vector3(x+25,y+25,2),Vector3(x,y+25,2)],Color("d8aa8b") if (row+col)%2 else Color("8f739a"))
+	var pillars: Array[Dictionary] = []
+	for z in range(100,1500,210):
+		for side: int in [-1,1]: pillars.append({"x":side*255-21,"z":z,"dist":Vector2(side*255,z).distance_to(fp_position)})
+	pillars.sort_custom(func(a: Dictionary,b: Dictionary) -> bool: return a.dist>b.dist)
+	for p in pillars:
+		fp_block(p.x-13,p.z-6,68,12,48)
+		fp_block(p.x,p.z,42,240,36)
+		fp_face([Vector3(p.x-9,232,p.z-5),Vector3(p.x+53,232,p.z-5),Vector3(p.x+53,248,p.z-5),Vector3(p.x-9,248,p.z-5)],Color("90738b"))
+	var cam := fp_camera(Vector3(0,sin(minf(1,fp_flight/1.2)*PI)*180 if mode=="throw" else 0,300-minf(1,fp_flight/1.2)*260))
+	if cam.z>12 and mode not in ["explosion","escape_win"]:
+		var screen := fp_project(cam)
+		var scale_factor := minf(5,470/cam.z*0.85)
+		var angle := fp_flight*5 if mode=="throw" else 0.0
+		var origin := screen-(Vector2(480,306)*scale_factor).rotated(angle)
+		draw_set_transform(origin,angle,Vector2.ONE*scale_factor)
+		sans()
+		draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+	if mode=="explosion":
+		var center := fp_project(fp_camera(Vector3(0,75,40)))
+		draw_arc(center,maxf(1,impact_time*150),0,TAU,48,GOLD,5)
+		for p in sparks:
+			if p.life>0: r(p.p.x,p.p.y,5,5,p.c)
+		if impact_time<0.18: r(0,0,960,600,Color(1,0.95,0.8,1-impact_time/0.18))
+	if mode=="escape_win":
+		for i in range(7): draw_arc(Vector2(480,290),180+i*5,0,TAU,64,CYAN if i%2 else Color("ad73e7"),2)
+		r(130,157,700,290,Color("080d1aee"))
+		label("VOCÊ QUEBROU AS REGRAS.",480,225,30,GOLD,true)
+		label("SANS EXPLODIU. UMA FENDA SE ABRIU.",480,280,18,CYAN,true)
+		label("UÉ... DELTARUNE NO UNDERTALE?!",480,319,18,WHITE,true)
+		label("ENTER: ATRAVESSAR PARA DELTARUNE",480,398,16,GOLD,true)
+	else:
+		label("FORA DA CAIXA · PRIMEIRA PESSOA",30,44,16,CYAN)
+		label("HP %d / 92" % hp,820,44,16,GOLD)
+		r(479,291,2,18,CYAN)
+		r(471,299,18,2,CYAN)
+		var dist := fp_position.distance_to(Vector2(0,300))
+		label("ESPAÇO / BOTÃO DIREITO: ARREMESSAR SANS" if dist<195 else "APROXIME-SE DO SANS",480,513,18,CYAN,true)
+		for side: int in [-1,1]:
+			var x := 480+side*220
+			r(x-42,565,84,35,Color("553755"))
+			r(x-35,553,70,38,Color("caa594"))
+			r(x-25,545,48,32,Color("e4c2a6"))
+		r(0,558,960,42,Color("080c16dd"))
+		label("WASD: ANDAR · SETAS / ARRASTE: OLHAR · E: VOLTAR · ESC: PAUSA",480,584,13,WHITE,true)
+	if mode=="paused":
+		r(0,0,960,600,Color("060910dd"))
+		label("PAUSADO · ESC PARA CONTINUAR",480,300,26,GOLD,true)
+	return true
+
+
+# Chapter 2: a deliberately impossible DELTARUNE crossover fan encounter.
+var neo_hp := 180
+var cyber_tp := 0
+var cyber_wave := 0
+var cyber_time := 0.0
+var cyber_age := 0.0
+var cyber_spawn := 0
+var cyber_cool := 0.0
+var cyber_selected := 0
+var cyber_bullets: Array[Dictionary] = []
+var cyber_shots: Array[Vector2] = []
+var impact_time := 0.0
+
+func start_crossover() -> void:
+	mode = "dr_intro"
+	hp = 120
+	pies = 3
+	neo_hp = 180
+	cyber_tp = 0
+	cyber_wave = 0
+	cyber_time = 0
+	cyber_age = 0
+	cyber_bullets.clear()
+	cyber_shots.clear()
+	music_player.pitch_scale = 1.12
+
+func cyber_next_wave() -> void:
+	mode = "dr_attack"
+	cyber_age = 0
+	cyber_spawn = 0
+	cyber_wave += 1
+	cyber_bullets.clear()
+	cyber_shots.clear()
+	cyber_cool = 0
+	soul = Vector2(480,440)
+	immunity = 1
+
+func cyber_confirm() -> void:
+	match mode:
+		"dr_intro": cyber_next_wave()
+		"dr_dead": start_crossover()
+		"dr_win": start()
+		"dr_menu":
+			match cyber_selected:
+				0: neo_hp = maxi(0,neo_hp-25)
+				1:
+					neo_hp = maxi(0,neo_hp-12)
+					cyber_tp = mini(100,cyber_tp+25)
+				2:
+					if pies>0:
+						hp = mini(120,hp+40)
+						pies -= 1
+				3:
+					if neo_hp<=35: neo_hp = 0
+			if neo_hp==0: mode = "dr_win"
+			else: cyber_next_wave()
+
+func cyber_shoot() -> void:
+	if mode=="dr_attack" and cyber_cool<=0:
+		cyber_shots.append(soul-Vector2(0,10))
+		cyber_cool = 0.18
+
+func process_crossover(dt: float) -> bool:
+	if not mode.begins_with("dr_"): return false
+	clock += dt
+	cyber_time += dt
+	message_time -= dt
+	if mode!="dr_attack":
+		queue_redraw()
+		return true
+	cyber_age += dt
+	immunity = maxf(0,immunity-dt)
+	cyber_cool = maxf(0,cyber_cool-dt)
+	var dx := int(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT))-int(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT))
+	var dy := int(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP))
+	soul = (soul+Vector2(dx,dy).normalized()*210*dt).clamp(Vector2(249,299),Vector2(711,501))
+	if Input.is_physical_key_pressed(KEY_SPACE) or Input.is_physical_key_pressed(KEY_Z): cyber_shoot()
+	if cyber_age>1 and cyber_age>(cyber_spawn+1)*0.58:
+		var n := cyber_spawn
+		cyber_spawn += 1
+		match cyber_wave%3:
+			0:
+				var gap := 290+n*71%340
+				for x in range(255,710,38):
+					if absf(x-gap)>47: cyber_bullets.append({"p":Vector2(x,283),"v":Vector2(0,120+cyber_wave*4),"kind":0,"graze":false})
+			1:
+				for i in range(-2,3):
+					var angle := (soul-Vector2(480,240)).angle()+i*0.24
+					cyber_bullets.append({"p":Vector2(480,280),"v":Vector2.from_angle(angle)*145,"kind":1,"graze":false})
+			2:
+				for i in range(5): cyber_bullets.append({"p":Vector2(230 if n%2 else 730,310+i*41),"v":Vector2(145 if n%2 else -145,sin(n)*28),"kind":2,"graze":false})
+	var enemy_x := 480+sin(cyber_time*1.5)*92
+	for i in range(cyber_shots.size()):
+		cyber_shots[i].y -= 520*dt
+		var shot := cyber_shots[i]
+		if shot.y<242 and shot.y>112 and absf(shot.x-enemy_x)<56:
+			neo_hp = maxi(0,neo_hp-(18 if cyber_tp>=100 else 4))
+			if cyber_tp>=100: cyber_tp = 0
+			cyber_shots[i].y = -100
+	cyber_shots = cyber_shots.filter(func(p: Vector2) -> bool: return p.y>-20)
+	for b in cyber_bullets:
+		b.p += b.v*dt
+		var dist: float = b.p.distance_to(soul)
+		if dist<14 and immunity<=0 and not practice:
+			hp = maxi(0,hp-8)
+			immunity = 0.7
+			if hp==0: mode = "dr_dead"
+		elif dist<34 and not b.graze:
+			b.graze = true
+			cyber_tp = mini(100,cyber_tp+6)
+	cyber_bullets = cyber_bullets.filter(func(b: Dictionary) -> bool: return b.p.x>220 and b.p.x<740 and b.p.y<530 and b.p.y>275)
+	if neo_hp==0: mode = "dr_win"
+	elif mode=="dr_attack" and cyber_age>10:
+		mode = "dr_menu"
+		cyber_selected = 0
+		cyber_bullets.clear()
+	queue_redraw()
+	return true
+
+func draw_neo(pos: Vector2) -> void:
+	draw_set_transform(pos+Vector2(0,sin(cyber_time*3)*4),0,Vector2.ONE*2.1)
+	for side: int in [-1,1]:
+		draw_line(Vector2(side*35,-85),Vector2(side*22,-10),Color("69e5bf99"))
+		draw_colored_polygon(PackedVector2Array([Vector2(side*17,-9),Vector2(side*58,-29),Vector2(side*48,9),Vector2(side*21,19)]),Color("b9b0eb"))
+		draw_colored_polygon(PackedVector2Array([Vector2(side*21,-4),Vector2(side*48,-19),Vector2(side*42,5),Vector2(side*24,13)]),Color("62528e"))
+		r(-41 if side<0 else 22,14,18,8,Color("dcd4f2"))
+		r(-43 if side<0 else 34,20,10,18,Color("8d83bf"))
+		r(-14 if side<0 else 4,35,10,28,Color("edb9d9"))
+		r(-20 if side<0 else 5,60,18,7,Color("ece9f5"))
+	r(-19,-8,38,43,Color("c98abd"))
+	r(-11,2,22,24,Color("efc2da"))
+	r(-7,8,14,11,Color("f4e9ac"))
+	r(-5,10,10,7,Color("50e9c2"))
+	r(-14,-38,28,30,Color("f3eadc"))
+	r(-13,-29,12,8,Color("f5ce49"))
+	r(2,-29,12,8,Color("f38cc0"))
+	draw_colored_polygon(PackedVector2Array([Vector2(10,-21),Vector2(25,-16),Vector2(11,-13)]),Color("eee8de"))
+	r(-11,-13,23,4,Color("1c1630"))
+	r(-13,-40,26,5,Color("19182c"))
+	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+
+func draw_crossover() -> bool:
+	var phase := before_pause if mode=="paused" else mode
+	if not phase.begins_with("dr_"): return false
+	r(0,0,960,600,Color("090b1b"))
+	for i in range(22):
+		var x := i*49
+		r(x,45+i*37%85,32,170,Color("151d33"))
+		for row in range(8): r(x+7,65+i*37%85+row*16,4,6,Color("425473") if (i+row)%3 else Color("b66b9b"))
+	for i in range(10):
+		var x := fposmod(i*151-cyber_time*13,1100)
+		r(x,90+i*47%120,68,23,Color("293043"))
+		label("[ DEAL ]" if i%2 else "1997",x+34,106+i*47%120,10,GOLD,true)
+	for i in range(7): r(0,270+i*i*5,960,1,Color("63477855"))
+	for x in range(-900,1900,140): draw_line(Vector2(480+(x-480)*0.14,270),Vector2(x,600),Color("63477855"))
+	draw_neo(Vector2(480+sin(cyber_time*1.5)*92,147))
+	label("SPAMTON NEO",36,35,16,Color("f0a2d1"))
+	label("UM [[GRANDE NEGÓCIO]] ENTRE UNIVERSOS",635,35,11,CYAN)
+	r(376,264,208,5,Color("482945"))
+	r(376,264,208*float(neo_hp)/180,5,Color("e7a3d1"))
+	r(236,286,488,228,Color("be9ed7"))
+	r(240,290,480,220,Color("050a16"))
+	if phase=="dr_attack":
+		for b in cyber_bullets:
+			if b.p.x<245 or b.p.x>715 or b.p.y<295 or b.p.y>505: continue
+			if b.kind==2: r(b.p.x-10,b.p.y-7,20,14,Color("8ce4ca"))
+			else: draw_colored_polygon(PackedVector2Array([b.p+Vector2(0,-8),b.p+Vector2(7,0),b.p+Vector2(0,8),b.p+Vector2(-7,0)]),Color("eda8d4") if b.kind else Color("8ce4ca"))
+		for shot in cyber_shots: r(shot.x-2,shot.y-9,4,15,GOLD)
+		if immunity<=0 or int(clock*16)%2==0: heart(soul,Color("ffe55d"),2.3)
+		label(message if message_time>0 and message.begins_with("TELETRANSPORTE") else "SEGURE Z / ESPAÇO PARA ATIRAR",480,535,13,GOLD,true)
+	elif phase=="dr_menu":
+		label("SELECIONE UMA AÇÃO",480,344,20,Color("e8d8f5"),true)
+		label("* Corte os fios. Ou faça um negócio.",480,380,15,Color("a99ec4"),true)
+		var options := ["LUTAR","AGIR","ITEM","POUPAR"]
+		for i in range(4):
+			var x := 255+i*115
+			r(x,431,106,43,Color("e7a3d1") if i==cyber_selected else Color("5d5577"))
+			r(x+2,433,102,39,Color("101426"))
+			label(options[i],x+53,458,16,GOLD if i==cyber_selected else WHITE,true)
+	else:
+		label("DELTARUNE NO UNDERTALE?!" if phase=="dr_intro" else ("VOCÊ É UM [[BIG SHOT]]!" if phase=="dr_win" else "CONEXÃO PERDIDA."),480,345,26,Color("f0b0db"),true)
+		label("NÃO FAZ SENTIDO. MAS VAI TER." if phase=="dr_intro" else "Mantenha sua determinação entre universos.",480,389,16,Color("a8bace"),true)
+		label("ENTER: ENFRENTAR SPAMTON NEO" if phase=="dr_intro" else "ENTER: JOGAR NOVAMENTE",480,458,16,GOLD,true)
+	label("KRIS",45,560,20)
+	label("HP %d / 120" % hp,45,584,16,CYAN)
+	label("TP %d%%" % cyber_tp,800,560,18,GOLD)
+	label("TORTAS ×%d · TURNO %d" % [pies,cyber_wave],760,584,12)
+	r(280,558,390,6,Color("382344"))
+	r(280,558,390*float(neo_hp)/180,6,Color("eda4d6"))
+	label("NEO · FIOS RESTANTES",480,585,12,Color("b8a2ce"),true)
+	if mode=="paused":
+		r(0,0,960,600,Color("060910dd"))
+		label("PAUSADO · ESC PARA CONTINUAR",480,300,26,GOLD,true)
+	return true
