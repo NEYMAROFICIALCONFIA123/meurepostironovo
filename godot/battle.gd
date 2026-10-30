@@ -29,9 +29,13 @@ var practice := false
 var muted := false
 var music_player: AudioStreamPlayer
 var music_bus := 0
+var voice_player: AudioStreamPlayer
+var voice_key := ""
 var multiverse_scene: Node2D
 
 func _ready() -> void:
+	voice_player = AudioStreamPlayer.new()
+	add_child(voice_player)
 	multiverse_scene = preload("res://multiverse.gd").new()
 	multiverse_scene.set("host",self)
 	add_child(multiverse_scene)
@@ -192,6 +196,7 @@ func say(s: String) -> void:
 	message_time = 2.5
 
 func start() -> void:
+	voice_player.stop()
 	music_player.pitch_scale = 1.0
 	fp_position = Vector2(0,680)
 	fp_yaw = 0
@@ -330,6 +335,9 @@ func spawn_hazard() -> void:
 	spawn_count += 1
 
 func _process(delta: float) -> void:
+	voice_player.stream_paused = mode=="paused"
+	voice_player.volume_db = -80 if muted else 0
+	music_player.volume_db = -80 if muted else (-28 if voice_player.playing else -12)
 	var dt := minf(delta,0.033)
 	if mode=="multiverse":
 		queue_redraw()
@@ -431,10 +439,6 @@ func _draw() -> void:
 		label("WASD / SETAS: MOVER   Z: CONFIRMAR   ESC: PAUSAR",480,514,12,Color("858d9e"),true)
 		label("E: SAIR DA CAIXA / PRIMEIRA PESSOA · T: TREINO · M: SOM",480,538,12,CYAN,true)
 		return
-	if message_time>0:
-		r(568,155,314,52,Color("e6e5e0"))
-		r(558,176,12,10,Color("e6e5e0"))
-		label(message,582,185,14,Color("26232d"))
 	label("TURNO %02d" % (wave+1),75,347,11,Color("6d7688"))
 	label("ALMA AZUL" if gravity else "ALMA VERMELHA",742,347,11,CYAN if gravity else RED)
 	label("%d / 8" % hits,795,369,12,Color("6d7688"))
@@ -494,6 +498,7 @@ var fp_return := "attack"
 func toggle_first_person() -> void:
 	if mode.begins_with("dr_"):
 		say("TELETRANSPORTE BLOQUEADO PELO SPAMTON!")
+		if not voice_player.playing: play_voice("locked")
 		return
 	if mode in ["attack","menu","aim"]:
 		fp_return = mode
@@ -503,6 +508,12 @@ func toggle_first_person() -> void:
 		mode = fp_return
 		immunity = 1
 
+func play_voice(key: String) -> void:
+	voice_key = key
+	voice_player.stop()
+	voice_player.stream = load("res://assets/voices/"+key+".ogg")
+	voice_player.play()
+
 func toss_sans() -> void:
 	if mode != "fps": return
 	var delta := Vector2(0,300)-fp_position
@@ -510,13 +521,14 @@ func toss_sans() -> void:
 		say("chegue perto e olhe para o Sans.")
 		return
 	mode = "throw"
+	play_voice("script")
 	fp_flight = 0
 	say("ISSO NÃO ESTÁ NO ROTEIRO!")
 
 func _input(event: InputEvent) -> void:
 	if mode == "fps" and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		fp_yaw += event.relative.x*0.004
-		fp_pitch = clampf(fp_pitch+event.relative.y*0.6,-100,100)
+		fp_pitch = clampf(fp_pitch-event.relative.y*0.6,-100,100)
 	if mode == "fps" and event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:
 		toss_sans()
 
@@ -528,7 +540,7 @@ func process_first_person(dt: float) -> bool:
 		var forward := float(int(Input.is_physical_key_pressed(KEY_W))-int(Input.is_physical_key_pressed(KEY_S)))
 		var side := float(int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A)))
 		fp_yaw += (int(Input.is_physical_key_pressed(KEY_RIGHT))-int(Input.is_physical_key_pressed(KEY_LEFT)))*dt*1.8
-		fp_pitch = clampf(fp_pitch+(int(Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_UP)))*dt*100,-100,100)
+		fp_pitch = clampf(fp_pitch-(int(Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_UP)))*dt*100,-100,100)
 		var direction := Vector2(sin(fp_yaw)*forward+cos(fp_yaw)*side,-cos(fp_yaw)*forward+sin(fp_yaw)*side).normalized()
 		fp_position += direction*(290 if Input.is_physical_key_pressed(KEY_SHIFT) else 190)*dt
 		fp_position = fp_position.clamp(Vector2(-190,130),Vector2(190,1300))
@@ -647,7 +659,6 @@ func draw_first_person() -> bool:
 			r(x-25,545,48,32,Color("e4c2a6"))
 		r(0,558,960,42,Color("080c16dd"))
 		label("WASD: ANDAR · SETAS / ARRASTE: OLHAR · E: VOLTAR · ESC: PAUSA",480,584,13,WHITE,true)
-		if message_time>0: label(message,480,90,16,GOLD,true)
 	if mode=="paused":
 		r(0,0,960,600,Color("060910dd"))
 		label("PAUSADO · ESC PARA CONTINUAR",480,300,26,GOLD,true)
@@ -825,7 +836,7 @@ func draw_crossover() -> bool:
 		if immunity<=0 or int(clock*16)%2==0: heart(soul,Color("ffe55d"),2.3)
 		label(message if message_time>0 and message.begins_with("TELETRANSPORTE") else "SEGURE Z / ESPAÇO PARA ATIRAR",480,535,13,GOLD,true)
 	elif phase=="dr_menu":
-		label("* VOCÊ QUER SER UM [[BIG SHOT]]?",480,344,20,Color("e8d8f5"),true)
+		label("SELECIONE UMA AÇÃO",480,344,20,Color("e8d8f5"),true)
 		label("* Corte os fios. Ou faça um negócio.",480,380,15,Color("a99ec4"),true)
 		var options := ["LUTAR","AGIR","ITEM","POUPAR"]
 		for i in range(4):

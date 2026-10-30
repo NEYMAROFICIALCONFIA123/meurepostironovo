@@ -80,6 +80,7 @@ func portal(pos: Vector3,color: String) -> Node3D:
 	return node
 
 func humanoid(kind: String,pos: Vector3) -> Node3D:
+	if kind!="roblox": return preload("res://premium_models.gd").humanoid(kind,pos,self)
 	var node := group(pos)
 	var skin := "#c13e53" if kind=="spider" else ("#b9b3ab" if kind=="war" else "#dec19e")
 	var shirt: String = {"rick":"#e3ecea","morty":"#e7c34e","spider":"#b52f48","war":"#aea79d","roblox":"#477ace"}[kind]
@@ -153,6 +154,7 @@ func build(index: int) -> void:
 		3: obby()
 		4: garage()
 		5: cyber()
+	preload("res://premium_models.gd").enrich(index,self)
 	actors.portal = portal(Vector3(3.7 if index==4 else 3.4,2,-9),"#8eee54" if index==4 else ("#db79d3" if index==5 else "#8bd8ff"))
 
 func city() -> void:
@@ -240,8 +242,8 @@ func obby() -> void:
 func garage() -> void:
 	block(Vector3(0,-0.16,-2),Vector3(18,0.3,20),"#7f8178")
 	block(Vector3(0,3,-9),Vector3(18,6,0.35),"#79867b")
-	for side: int in [-1,1]: block(Vector3(side*8.8,3,0),Vector3(0.3,6,18),"#5f706d")
-	block(Vector3(0,6,0),Vector3(18,0.2,18),"#859188")
+	for side: int in [-1,1]: block(Vector3(side*8.8,3,0),Vector3(0.3,6,28),"#5f706d")
+	block(Vector3(0,6,0),Vector3(18,0.2,28),"#859188")
 	block(Vector3(0,1,-7.7),Vector3(14,1.8,1.5),"#69756b")
 	block(Vector3(0,1.99,-7.7),Vector3(14,0.18,1.8),"#9e9277")
 	for i in range(10):
@@ -301,29 +303,31 @@ func animate(age: float,dt: float,accept_input: bool) -> void:
 	if accept_input:
 		gaze.x += (int(Input.is_physical_key_pressed(KEY_RIGHT))-int(Input.is_physical_key_pressed(KEY_LEFT)))*dt*0.8
 		gaze.y = clampf(gaze.y+(int(Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_UP)))*dt*0.55,-0.65,0.65)
-		walk += Vector2(int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A)),int(Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_W)))*dt*2
-		walk = walk.clamp(Vector2(-2,-2),Vector2(2,2))
-	var base_y := 3.1 if scene_index==0 else (2.1 if scene_index==2 else 1.72)
+		var side := int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A))
+		var forward := int(Input.is_physical_key_pressed(KEY_W))-int(Input.is_physical_key_pressed(KEY_S))
+		var direction := Vector2(sin(gaze.x)*forward+cos(gaze.x)*side,-cos(gaze.x)*forward+sin(gaze.x)*side).normalized()
+		walk += direction*dt*(5 if Input.is_physical_key_pressed(KEY_SHIFT) else 3)
+		var bounds: Rect2 = [Rect2(-5,-6,10,20),Rect2(-13,-34,26,46),Rect2(-14,-29,28,36),Rect2(-5,-4,10,8),Rect2(-7.5,-11,15,16),Rect2(-14,-32,28,44)][scene_index]
+		walk = walk.clamp(bounds.position,bounds.end)
+	var base_y := 2.1 if scene_index==2 else 1.72
 	var base_z := 6.4 if scene_index==4 else (9.0 if scene_index==0 else 8.0)
-	camera.position = Vector3(walk.x+sin(age*0.35)*0.18,base_y+sin(age*2)*0.025,base_z-minf(age,7)*0.18+walk.y)
-	camera.rotation = Vector3(-gaze.y+(0.04 if scene_index==0 else 0.0),-gaze.x,sin(age*0.65)*0.006)
+	camera.position = Vector3(walk.x,base_y,base_z+walk.y)
+	camera.rotation = Vector3(-gaze.y,-gaze.x,0)
 	if actors.has("portal"): actors.portal.rotation.z = age*0.12
 	if scene_index==0:
 		actors.hero.position = Vector3(-2.4+sin(age*1.3)*1.5,3+cos(age*1.3)*0.6,-6)
 		actors.hero.rotation.z = sin(age*1.3)*0.3
 	elif scene_index==3: actors.hero.position.y = 0.4+maxf(0,sin(age*2))*0.6
 	elif scene_index==4:
-		var progress := clampf((age-1.2)/1.5,0,1)
-		actors.cage.visible = age>1.2
-		actors.beam.visible = age>1.2 and age<3.7
+		var progress := clampf((age-6.5)/2.3,0,1)
+		actors.cage.visible = age>6.5
+		actors.beam.visible = age>6.5 and age<11.3
 		actors.cage.position.z = -3+progress*6
 		actors.cage.scale = Vector3.ONE*(0.3+progress*0.7)
-		if age>3.7:
-			actors.cage.rotation.z = 0.3+age-3.7
-			actors.cage.position.x = 1+(age-3.7)*2
-			actors.cage.position.y = maxf(0.3,1.7-(age-3.7))
-			camera.position.x += minf(1,age-3.7)*0.6
-			camera.rotation.z -= sin((age-3.7)*2)*0.05
+		if age>11.3:
+			actors.cage.rotation.z = 0.3+age-11.3
+			actors.cage.position.x = 1+(age-11.3)*2
+			actors.cage.position.y = maxf(0.3,1.7-(age-11.3))
 		actors.rick.rotation.y = sin(age)*0.12
 	elif scene_index==5:
 		actors.neo.position.y = 1+sin(age*2)*0.12

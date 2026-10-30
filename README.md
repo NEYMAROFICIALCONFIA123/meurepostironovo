@@ -52,7 +52,7 @@ A câmera usa a mesma projeção 2.5D, agora com posição, rotação, altura e 
 
 Sim. É uma sequência alternativa de fã, não parte do cânone de nenhum dos jogos.
 
-Ao lançar o Sans, surge **ISSO NÃO ESTÁ NO ROTEIRO!**. Depois do impacto e da explosão, começa automaticamente uma sequência de seis ambientes originais em 3D estilizado, pela câmera do jogador:
+Ao lançar o Sans, você ouve **ISSO NÃO ESTÁ NO ROTEIRO!**. Depois do impacto e da explosão, começa automaticamente uma sequência de seis ambientes originais em 3D estilizado, pela câmera do jogador:
 
 1. **Homem-Aranha:** telhado, avenida, prédios com janelas iluminadas, passarelas e herói em volume balançando na teia.
 2. **God of War:** montanhas, neve e guerreiro com machado.
@@ -61,7 +61,7 @@ Ao lançar o Sans, surge **ISSO NÃO ESTÁ NO ROTEIRO!**. Depois do impacto e da
 5. **Garagem do Rick e Morty:** sala com paredes, bancada, armários, frascos e monitores; Rick dispara uma grade 3D na direção da câmera, mas ela erra e a captura falha.
 6. **Spamton NEO:** seus fios bloqueiam o portal, interrompem os saltos e iniciam automaticamente a luta.
 
-A viagem dura aproximadamente 49 segundos de animação. A câmera é em **primeira pessoa**, com mãos visíveis e pequenos movimentos cinematográficos. **WASD** permite deslocamento limitado na área de observação (não são fases completas com colisão/física); **setas ou arrastar com o botão esquerdo** olham ao redor. O botão **DIMENSÕES 3D** na página permite testar diretamente, sem refazer o Sans. **Enter ou clique sem arrastar** avança a cena atual na web (Enter ou botão direito no Godot) (após uma proteção de 0,65 s contra cliques acidentais); **Esc** pausa. A derrota no NEO reinicia só o segundo encontro, sem obrigar a rever a viagem. Durante a luta, tentar usar E exibe o bloqueio do teletransporte.
+A viagem dura aproximadamente 106 segundos de animação. A câmera é em **primeira pessoa**, com mãos visíveis, eixo vertical corrigido e sem rotação/avanço automáticos. **WASD** anda em relação à direção da câmera; **Shift** corre. Há limites maiores de exploração por cenário (não são fases completas com colisão/física); **setas ou arrastar com o botão esquerdo** olham ao redor. O botão **DIMENSÕES 3D** na página permite testar diretamente, sem refazer o Sans. **Enter ou clique sem arrastar** avança a cena atual na web (Enter ou botão direito no Godot) (após uma proteção de 0,65 s contra cliques acidentais); **Esc** pausa. A derrota no NEO reinicia só o segundo encontro, sem obrigar a rever a viagem. Durante a luta, tentar usar E exibe o bloqueio do teletransporte.
 
 São **ambientes de homenagem com exploração limitada durante a sequência**, não cópias completas ou versões jogáveis dos jogos citados. Personagens e marcas pertencem aos respectivos titulares; os desenhos procedurais são originais.
 
@@ -93,8 +93,26 @@ O cenário, sprite de fã, projéteis e interface são procedurais e originais; 
 ## Dimensões 3D reais
 
 - **Web:** Three.js/WebGL 2, `PerspectiveCamera`, malhas de caixas/cilindros/toros, personagens compostos por volumes, materiais PBR, iluminação hemisférica/direcional, sombras suaves, névoa, portais emissivos e antialiasing. O resultado é composto no Canvas junto do HUD; não é uma imagem ou vídeo pré-renderizado.
-- **Godot:** `SubViewport` com mundo 3D próprio, `Camera3D`, `Node3D`, `MeshInstance3D`, `MultiMeshInstance3D`, `WorldEnvironment`, luzes e sombras. Só as legendas/HUD ficam em 2D.
+- **Godot:** `SubViewport` com mundo 3D próprio, `Camera3D`, `Node3D`, `MeshInstance3D`, `MultiMeshInstance3D`, `WorldEnvironment`, luzes e sombras. Só o HUD e os controles ficam em 2D; as falas são reproduzidas por AudioStreamPlayer.
 - As seis dimensões foram convertidas. A luta do Sans, a saída inicial do corredor e a batalha de Spamton preservam suas mecânicas anteriores 2D/2.5D; não são jogos completos das franquias citadas.
+
+### Edição visual ampliada e dublada
+
+- Modelos de homenagem redesenhados com rostos, olhos, nariz, dedos, cápsulas anatômicas, roupas sobrepostas, bolsos, acessórios, barba, cabelo e machado. Minecraft e Roblox preservam sua linguagem de blocos.
+- Cenários maiores com quarteirões, carros, estruturas de telhado, vegetação, pedras, terreno expandido, plataformas distantes, armários, tubulações, bancada e equipamentos.
+- Na web: materiais rugosos com textura/bump procedural, montanhas de malha irregular, sombras 2048² e bloom moderado com composição HDR. No Godot: modelos arredondados, cenários ampliados e materiais com normais procedurais; o renderer Compatibility não replica todo o pós-processamento da web.
+- A câmera não gira, inclina ou avança sozinha. Mouse para cima olha para cima; mouse para baixo olha para baixo. WASD acompanha o rumo da câmera.
+- É uma melhoria procedural independente e estilizada, **não uma produção AAA fotorealista** com modelos escaneados, captura de movimento ou níveis de jogos comerciais.
+
+### Falas em português, sem legendas de diálogo
+
+Nove arquivos Ogg locais em `web/audio/` e `godot/assets/voices/`: aviso do roteiro, narração dos quatro primeiros mundos, Rick, falha da captura, Spamton e bloqueio da fuga. São performances **sintéticas e originais**, escolhidas para o projeto; não são as vozes oficiais nem gravações extraídas das franquias.
+
+- O áudio começa após clicar em jogar ou em Dimensões 3D; não depende de serviço de voz online.
+- Cada salto interrompe a fala anterior. Rick reage à falha da captura aos 11,3 s da cena.
+- Esc pausa e retoma a fala no ponto certo. M controla voz e música. A música baixa durante a fala.
+- Os diálogos narrativos/balões foram retirados da tela; nomes de mundos, menus, controles e avisos de estado continuam como interface.
+- O navegador decodifica os arquivos pelo Web Audio; a versão Godot usa AudioStreamPlayer.
 
 ### Recriar o bundle 3D da web
 
@@ -112,7 +130,7 @@ npx playwright install chromium
 node tools/test-dimensions3d.cjs
 ```
 
-O teste verifica renderização WebGL das seis cenas, câmera em primeira pessoa, movimento, giro, arrastar sem pular e transição final para o NEO.
+O teste verifica as seis cenas WebGL, eixos verticais da câmera, movimento, giro, arrastar sem pular, transição final para NEO, carregamento das nove vozes, pausa/retomada, mudo e reinício.
 
 ## Corredor 2.5D anterior
 
