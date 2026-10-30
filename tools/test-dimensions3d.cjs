@@ -16,8 +16,18 @@ const assert = require('node:assert/strict');
       const result=await page.evaluate(i=>{mv.stage=i;mv.age=i===4?4.2:2.3;draw();return window.Dimension3D.stats();},index);
       assert.equal(result.webgl,true,`Scene ${index} must use WebGL`);
       assert.equal(result.error,null);
-      assert.ok(result.objects>15,'Scene must contain volumetric meshes');
+      assert.ok(result.props>20,'Generated dimensions must be populated');assert.ok(result.batches>=5,'Environment must be rendered with instanced 3D models');assert.ok(result.cells>=200,'The entire terrain must be covered');
     }
+    const regeneration=await page.evaluate(()=>{
+      mv.stage=1;mv.age=1;
+      Dimension3D.newRun(12345);draw();const first=Dimension3D.inspect();
+      Dimension3D.newRun(12345);draw();const second=Dimension3D.inspect();
+      Dimension3D.newRun(67890);draw();const changed=Dimension3D.inspect();
+      return {a:first.signature,b:second.signature,c:changed.signature,seed:changed.seed};
+    });
+    assert.equal(regeneration.a,regeneration.b,'Explicit seed must reproduce the rendered world');
+    assert.notEqual(regeneration.a,regeneration.c,'Changing seed must rebuild the rendered world');
+    assert.equal(regeneration.seed,67890);
     await page.evaluate(()=>{mv.stage=1;mv.age=1;draw();});
     const pitchBefore=await page.evaluate(()=>window.Dimension3D.stats().rotation[0]);
     const pitchUp=await page.evaluate(()=>{window.Dimension3D.look(0,-100);mv.age+=.01;draw();return window.Dimension3D.stats().rotation[0]});

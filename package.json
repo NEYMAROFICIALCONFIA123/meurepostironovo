@@ -4,7 +4,8 @@
   "scripts": {
     "build:3d": "esbuild web/dimensions3d.src.js --bundle --minify --format=iife --outfile=web/vendor/dimensions3d.js",
     "test": "node tools/test-game.cjs",
-    "test:3d": "node tools/test-dimensions3d.cjs"
+    "test:3d": "node tools/test-dimensions3d.cjs",
+    "test:procedural": "node tools/test-procedural.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

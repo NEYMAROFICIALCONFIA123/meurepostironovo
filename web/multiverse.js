@@ -8,7 +8,7 @@ const mv={stage:0,age:0,active:false,stops:[
  {name:'RICK E MORTY',tag:'GARAGEM DO RICK · REALIDADE 05',line:'Rick: uma alma fora do roteiro? Vou capturar você!',duration:23,color:'#b3ee75'},
  {name:'SPAMTON NEO',tag:'DESTINO BLOQUEADO · REALIDADE 06',line:'VOCÊ NÃO VAI A LUGAR NENHUM, [[BIG SHOT]]!',duration:18,color:'#ec9bd4'}
 ]};
-function startMultiverse(){window.GameVoices?.play("city");mv.missSpoken=false;mv.stage=0;mv.age=0;mv.active=true;state='multiverse';keys.clear();document.exitPointerLock?.();$('#status').textContent='ERRO NO ROTEIRO · SALTO MULTIVERSAL';}
+function startMultiverse(){mv.seed=window.Dimension3D?.newRun();window.GameVoices?.play("city");mv.missSpoken=false;mv.stage=0;mv.age=0;mv.active=true;state='multiverse';keys.clear();document.exitPointerLock?.();$('#status').textContent='ERRO NO ROTEIRO · SALTO MULTIVERSAL';}
 function mvNext(){if(state!=='multiverse'||mv.age<.65)return;mv.stage++;mv.age=0;mv.missSpoken=false;window.GameVoices?.stop();if(mv.stage<6)window.GameVoices?.play(["city","snow","blocks","obby","rick","spamton"][mv.stage]);sfx(230+mv.stage*70,.15,'triangle',.04);if(mv.stage>=mv.stops.length){mv.active=false;startCrossover();drWave();}}
 function mvUpdate(dt){if(state!=='multiverse')return false;mv.age+=dt;t+=dt;if(mv.stage===4&&mv.age>11.3&&!mv.missSpoken){mv.missSpoken=true;window.GameVoices?.play("rick-miss");}if(mv.age>=mv.stops[mv.stage].duration)mvNext();return true;}
 function mvDraw(){
@@ -17,7 +17,7 @@ function mvDraw(){
  const frame=window.Dimension3D?.render(mv.stage,a,paused?null:keys);
  if(frame){ctx.imageSmoothingEnabled=true;ctx.drawImage(frame,0,0,960,600);ctx.imageSmoothingEnabled=false;}
  else{rect(0,0,960,600,'#101729');text('AS DIMENSÕES PRECISAM DE WEBGL 2',480,270,21,scene.color,'center');text('Ative a aceleração gráfica no navegador ou use o projeto Godot.',480,310,13,'#d7ddea','center');}
- rect(0,0,960,80,'#080c19ba');text(scene.tag+' · 3D / PRIMEIRA PESSOA',30,28,10,scene.color);text(scene.name,30,61,24,'#f0e7f2');text(`SALTO ${mv.stage+1} / 6`,930,46,12,scene.color,'right');
+ rect(0,0,960,80,'#080c19ba');text(scene.tag+' · 3D / PRIMEIRA PESSOA',30,28,10,scene.color);text(scene.name,30,61,24,'#f0e7f2');text(`SALTO ${mv.stage+1} / 6`,930,34,12,scene.color,'right');text(`SEMENTE ${mv.seed??'—'} · PROCEDURAL`,930,58,9,'#9cafbd','right');
  rect(478,298,4,4,'#ffffffaa');
  if(mv.stage===4&&a>11.3){rect(319,115,322,37,'#172318bb');text('CAPTURA FALHOU · RICK ERROU!',480,139,14,'#b3ee75','center');}
  if(mv.stage===5&&a>1.8){rect(285,114,390,37,'#34203ccc');text('TELETRANSPORTE: BLOQUEADO',480,138,15,'#f2b3da','center');}

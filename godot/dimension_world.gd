@@ -7,6 +7,8 @@ var actors: Dictionary = {}
 var palette: Dictionary = {}
 var gaze := Vector2.ZERO
 var walk := Vector2.ZERO
+var layout
+var run_seed := 1
 
 func material(color: String, glow: bool=false) -> StandardMaterial3D:
 	var key := color+str(glow)
@@ -114,13 +116,16 @@ func humanoid(kind: String,pos: Vector3) -> Node3D:
 		beam(Vector3(-0.22,1.65,0.2),Vector3(0.22,1,0.2),"#25324b",node)
 	return node
 
-func build(index: int) -> void:
+func build(index: int,seed_number: int=1) -> void:
 	if root: root.free()
 	palette.clear()
 	actors.clear()
+	run_seed = seed_number
+	layout = preload("res://world_layout.gd").new()
+	layout.generate(index,run_seed)
 	scene_index = index
 	gaze = Vector2.ZERO
-	walk = Vector2.ZERO
+	walk = layout.spawn
 	root = Node3D.new()
 	add_child(root)
 	camera = Camera3D.new()
@@ -147,138 +152,9 @@ func build(index: int) -> void:
 	for side: int in [-1,1]:
 		block(Vector3(side*0.39,-0.43,-0.7),Vector3(0.13,0.22,0.19),"#d9bda3",camera)
 		block(Vector3(side*0.42,-0.61,-0.65),Vector3(0.18,0.25,0.22),"#344b70",camera)
-	match index:
-		0: city()
-		1: snow()
-		2: voxels()
-		3: obby()
-		4: garage()
-		5: cyber()
-	preload("res://premium_models.gd").enrich(index,self)
-	actors.portal = portal(Vector3(3.7 if index==4 else 3.4,2,-9),"#8eee54" if index==4 else ("#db79d3" if index==5 else "#8bd8ff"))
+	actors = preload("res://procedural_dimension.gd").new().render(layout,self)
 
-func city() -> void:
-	block(Vector3(0,-0.3,8),Vector3(13,0.6,18),"#48505e")
-	block(Vector3(0,0.08,2),Vector3(13,0.2,0.4),"#a6a2a1")
-	for side: int in [-1,1]:
-		block(Vector3(side*6.2,0.35,8),Vector3(0.25,0.7,18),"#676d78")
-		for z in range(5):
-			var h := 9+(z*7+side*3+30)%12
-			var x := side*(10+z%2*2)
-			block(Vector3(x,h/2.0-8,-z*14-9),Vector3(9,h,10),"#35475c" if z%2 else "#3b3c52")
-			for row in range(int(h/1.1)-1):
-				for col in range(5): block(Vector3(x-3.3+col*1.6,row*1.1-6.5,-z*14-3.94),Vector3(0.53,0.63,0.045),"#647f91" if (row+col+z)%4 else "#ffcb8c",null,true)
-	block(Vector3(0,-8.05,-25),Vector3(8,0.1,90),"#252d3d")
-	for i in range(12): block(Vector3(0,-7.96,-i*6),Vector3(0.12,0.02,2.7),"#ebc589")
-	actors.hero = humanoid("spider",Vector3(-2.7,3,-6))
-	beam(Vector3(-2,18,-10),Vector3(-2.7,5,-6),"#d5e3ee")
-
-func snow() -> void:
-	block(Vector3(0,-0.2,-12),Vector3(70,0.4,80),"#c5d4d8")
-	for i in range(18):
-		var x := (1 if i%2 else -1)*(12+i*7%24)
-		var z := -8-int(i/2.0)*9
-		var h := 10+i*11%14
-		cylinder(Vector3(x,h/2.0-0.1,z),0,7,h,"#6d8590" if i%2 else "#879da7",null,5)
-		cylinder(Vector3(x,h*0.82,z),0,2.6,h*0.36,"#e5edf0",null,5)
-	for i in range(22):
-		var x := (1 if i%2 else -1)*(5+i%4*1.6)
-		var z := -i*3
-		block(Vector3(x,1.5,z),Vector3(0.3,3,0.3),"#515d60")
-		for j in range(3): cylinder(Vector3(x,2+j*0.65,z),0,1.1-j*0.24,1.7,"#526d70",null,5)
-	for side: int in [-1,1]:
-		block(Vector3(side*3.3,3,-13),Vector3(1.5,6,1.4),"#6c7e85")
-		for i in range(5): block(Vector3(side*3.3,1+i*0.8,-12.28),Vector3(0.15,0.4,0.03),"#88d4e5",null,true)
-	block(Vector3(0,6,-13),Vector3(8,0.9,1.8),"#6c7e85")
-	actors.hero = humanoid("war",Vector3(-2.3,0,-2.8))
-
-func voxels() -> void:
-	# Single instanced draw for the soil, followed by instanced green caps.
-	for layer in range(2):
-		var geo := BoxMesh.new()
-		geo.size = Vector3(1,1 if layer==0 else 0.08,1)
-		var multi := MultiMesh.new()
-		multi.transform_format = MultiMesh.TRANSFORM_3D
-		multi.mesh = geo
-		multi.instance_count = 1024
-		var n := 0
-		for x in range(-16,16):
-			for z in range(-24,8):
-				var h := 0.1 if x>6 and z<-3 else (0.55 if sin(x*0.4)+cos(z*0.3)>0.6 else 0.0)
-				multi.set_instance_transform(n,Transform3D(Basis.IDENTITY,Vector3(x,h-0.5 if layer==0 else h+0.025,z)))
-				n += 1
-		var node := MultiMeshInstance3D.new()
-		node.multimesh = multi
-		node.material_override = material("#88623f" if layer==0 else "#74ad4c")
-		root.add_child(node)
-	for p: Vector2 in [Vector2(-5,-4),Vector2(6,-10),Vector2(-8,-14),Vector2(8,-20),Vector2(-3,-22)]:
-		block(Vector3(p.x,1.5,p.y),Vector3(0.7,3,0.7),"#6c4d30")
-		for y in range(2): block(Vector3(p.x,3+y*0.8,p.y),Vector3(3-y*0.6,1,3-y*0.6),"#529548" if y else "#3b7738")
-	block(Vector3(10,0.18,-11),Vector3(7,0.05,15),"#4f9fb9")
-	for i in range(6): block(Vector3((i%3-1)*10,12+i%2*3,-i*11),Vector3(6,1.2,2.5),"#edf5f3")
-	var creature := group(Vector3(-2,0,-3))
-	block(Vector3(0,1.45,0),Vector3(0.63,0.65,0.62),"#6d9c47",creature)
-	block(Vector3(0,0.7,0),Vector3(0.43,0.87,0.4),"#5a813d",creature)
-	for side: int in [-1,1]:
-		block(Vector3(side*0.25,0.19,0.07),Vector3(0.27,0.38,0.65),"#527337",creature)
-		block(Vector3(side*0.17,1.52,0.32),Vector3(0.13,0.15,0.02),"#182e23",creature)
-	block(Vector3(0,1.3,0.32),Vector3(0.22,0.15,0.02),"#182e23",creature)
-
-func obby() -> void:
-	var colors := ["#a58cda","#74c7d3","#efbc72"]
-	for i in range(15):
-		var x := sin(i*0.9)*3
-		var z := 8-i*3.4
-		var y := maxf(0,i-2)*0.12
-		block(Vector3(x,y-0.3,z),Vector3(3,0.6,2.8),colors[i%3])
-		block(Vector3(x,y+0.035,z),Vector3(2.8,0.08,2.6),"#bed4df")
-	for i in range(7):
-		var cloud := ball(Vector3((1 if i%2 else -1)*(9+i),-7-i%3,-i*9),4,"#e4e8f3")
-		cloud.scale = Vector3(2,0.3,1)
-	actors.hero = humanoid("roblox",Vector3(-1.4,0.4,-3))
-	for side: int in [-1,1]: block(Vector3(side*2.2,2,-9),Vector3(0.3,4,0.3),"#e9d8a9")
-	block(Vector3(0,4,-9),Vector3(4.7,0.3,0.3),"#e9d8a9")
-
-func garage() -> void:
-	block(Vector3(0,-0.16,-2),Vector3(18,0.3,20),"#7f8178")
-	block(Vector3(0,3,-9),Vector3(18,6,0.35),"#79867b")
-	for side: int in [-1,1]: block(Vector3(side*8.8,3,0),Vector3(0.3,6,28),"#5f706d")
-	block(Vector3(0,6,0),Vector3(18,0.2,28),"#859188")
-	block(Vector3(0,1,-7.7),Vector3(14,1.8,1.5),"#69756b")
-	block(Vector3(0,1.99,-7.7),Vector3(14,0.18,1.8),"#9e9277")
-	for i in range(10):
-		block(Vector3(-6.3+i*1.4,1.13,-6.92),Vector3(1.23,1.34,0.06),"#899381" if i%2 else "#74836f")
-		block(Vector3(-6.3+i*1.4,1.52,-6.86),Vector3(0.5,0.07,0.08),"#b7bead")
-	for i in range(12): cylinder(Vector3(-6.2+i*1.1,2.2+i%3*0.1,-7.7),0.11,0.18,0.4+i%3*0.2,"#b4dcbb" if i%2 else "#b1c2d7")
-	block(Vector3(-4.6,2.7,-8.55),Vector3(3,1.15,0.4),"#364a4a")
-	block(Vector3(-4.6,2.72,-8.32),Vector3(2.7,0.8,0.04),"#7cbcaf",null,true)
-	for side: int in [-1,1]: block(Vector3(side*4,5.87,-2),Vector3(3,0.08,0.2),"#d4e8c7",null,true)
-	var light := OmniLight3D.new()
-	light.position = Vector3(0,4,-5)
-	light.light_color = Color("a5e6b6")
-	light.light_energy = 3
-	light.omni_range = 18
-	root.add_child(light)
-	actors.rick = humanoid("rick",Vector3(-1.7,0,-4.1))
-	actors.morty = humanoid("morty",Vector3(0.2,0,-5))
-	portal(Vector3(-5.8,2.5,-8.4),"#87eb54")
-	actors.cage = group(Vector3(0,1.7,1))
-	for i in range(4):
-		block(Vector3(-1.1+i*0.73,0,0),Vector3(0.035,2.1,0.035),"#8cf77c",actors.cage,true)
-		block(Vector3(0,-1.05+i*0.7,0),Vector3(2.2,0.035,0.035),"#8cf77c",actors.cage,true)
-	actors.beam = beam(Vector3(-1,1.2,-4),Vector3(0,1.7,1),"#92ef77")
-
-func cyber() -> void:
-	block(Vector3(0,-0.2,0),Vector3(35,0.4,55),"#242b45")
-	for x in range(-16,17,2): block(Vector3(x,0.015,-8),Vector3(0.022,0.025,48),"#74537d")
-	for z in range(-30,16,2): block(Vector3(0,0.016,z),Vector3(34,0.025,0.022),"#74537d")
-	for side: int in [-1,1]:
-		for i in range(9):
-			var x := side*(7+i%3*1.8)
-			var h := 6+i%4*2
-			var z := 4-i*6
-			block(Vector3(x,h/2.0,z),Vector3(2,h,2),"#242a42")
-			for j in range(5): block(Vector3(x,j*1.2+1,z+1.01),Vector3(0.7,0.4,0.03),"#66998e" if j%2 else "#d17caf",null,true)
+func make_puppet() -> Dictionary:
 	actors.neo = group(Vector3(-1.5,1,-5))
 	var puppet: Node3D = actors.neo
 	block(Vector3(0,1.1,0),Vector3(0.8,1.2,0.5),"#b86baf",puppet)
@@ -295,8 +171,10 @@ func cyber() -> void:
 		block(Vector3(side*0.3,-0.06,0.14),Vector3(0.4,0.16,0.45),"#eee1ef",puppet)
 		block(Vector3(side*1.08,1.5,-0.18),Vector3(1.5,0.9,0.18),"#ebb7d7" if side<0 else "#b7b3e9",puppet).rotation.z = side*0.5
 		beam(Vector3(side*0.6,2,0),Vector3(side*1.4,8,-1),"#64cbb5",puppet)
-	actors.lock = group(Vector3(3.4,2,-8.8))
+	actors.lock = group(Vector3(layout.portal_position.x,2,layout.portal_position.y+0.2))
 	for i in range(6): block(Vector3(0,0,0.1),Vector3(2.5,0.07,0.07),"#e094ce",actors.lock,true).rotation.z = i*PI/6
+
+	return actors
 
 func animate(age: float,dt: float,accept_input: bool) -> void:
 	if camera==null: return
@@ -306,18 +184,23 @@ func animate(age: float,dt: float,accept_input: bool) -> void:
 		var side := int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A))
 		var forward := int(Input.is_physical_key_pressed(KEY_W))-int(Input.is_physical_key_pressed(KEY_S))
 		var direction := Vector2(sin(gaze.x)*forward+cos(gaze.x)*side,-cos(gaze.x)*forward+sin(gaze.x)*side).normalized()
-		walk += direction*dt*(5 if Input.is_physical_key_pressed(KEY_SHIFT) else 3)
-		var bounds: Rect2 = [Rect2(-5,-6,10,20),Rect2(-13,-34,26,46),Rect2(-14,-29,28,36),Rect2(-5,-4,10,8),Rect2(-7.5,-11,15,16),Rect2(-14,-32,28,44)][scene_index]
-		walk = walk.clamp(bounds.position,bounds.end)
-	var base_y := 2.1 if scene_index==2 else 1.72
-	var base_z := 6.4 if scene_index==4 else (9.0 if scene_index==0 else 8.0)
-	camera.position = Vector3(walk.x,base_y,base_z+walk.y)
+		walk = layout.move_position(walk,direction*dt*(5 if Input.is_physical_key_pressed(KEY_SHIFT) else 3))
+	camera.position = Vector3(walk.x,layout.ground_at(walk)+1.72,walk.y)
 	camera.rotation = Vector3(-gaze.y,-gaze.x,0)
+	for key: String in ["hero","rick","morty"]:
+		if actors.has(key) and scene_index!=0:
+			var pos: Vector3 = actors[key].position
+			var delta := walk-Vector2(pos.x,pos.z)
+			if delta.length()<0.65 and delta.length()>0.001:
+				var corrected := Vector2(pos.x,pos.z)+delta.normalized()*0.65
+				if not layout.blocked(corrected):
+					walk = corrected
+					camera.position = Vector3(walk.x,layout.ground_at(walk)+1.72,walk.y)
 	if actors.has("portal"): actors.portal.rotation.z = age*0.12
 	if scene_index==0:
 		actors.hero.position = Vector3(-2.4+sin(age*1.3)*1.5,3+cos(age*1.3)*0.6,-6)
 		actors.hero.rotation.z = sin(age*1.3)*0.3
-	elif scene_index==3: actors.hero.position.y = 0.4+maxf(0,sin(age*2))*0.6
+	elif scene_index==3: actors.hero.position.y = layout.ground_at(Vector2(-1.4,-3))+maxf(0,sin(age*2))*0.3
 	elif scene_index==4:
 		var progress := clampf((age-6.5)/2.3,0,1)
 		actors.cage.visible = age>6.5

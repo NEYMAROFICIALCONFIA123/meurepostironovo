@@ -3,6 +3,7 @@ extends Node2D
 var host
 var stage := 0
 var age := 0.0
+var run_seed := 1
 var miss_spoken := false
 var font: Font = ThemeDB.fallback_font
 var viewport_3d: SubViewport
@@ -25,12 +26,13 @@ func _ready() -> void:
 	viewport_3d.add_child(dimension_world)
 
 func begin() -> void:
+	run_seed = randi()
 	host.play_voice("city")
 	miss_spoken = false
 	stage = 0
 	age = 0
 	host.mode = "multiverse"
-	dimension_world.build(stage)
+	dimension_world.build(stage,run_seed)
 	viewport_3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	queue_redraw()
 
@@ -46,7 +48,7 @@ func advance() -> void:
 		host.start_crossover()
 		host.cyber_next_wave()
 	else:
-		dimension_world.build(stage)
+		dimension_world.build(stage,run_seed)
 	queue_redraw()
 
 func _process(dt: float) -> void:
@@ -88,7 +90,8 @@ func _draw() -> void:
 	r(0,0,960,80,Color("080c19ba"))
 	txt(TAGS[stage]+" · 3D / PRIMEIRA PESSOA",30,28,12,c)
 	txt(TITLES[stage],30,61,27,Color("f0e7f2"))
-	txt("SALTO %d / 6" % (stage+1),815,46,14,c)
+	txt("SALTO %d / 6" % (stage+1),815,34,14,c)
+	txt("SEMENTE %d · PROCEDURAL" % run_seed,690,58,10,Color("9cafbd"))
 	r(478,298,4,4,Color("ffffffaa"))
 	if stage==4 and age>11.3:
 		r(319,115,322,37,Color("172318bb"))
