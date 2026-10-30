@@ -29,8 +29,12 @@ var practice := false
 var muted := false
 var music_player: AudioStreamPlayer
 var music_bus := 0
+var multiverse_scene: Node2D
 
 func _ready() -> void:
+	multiverse_scene = preload("res://multiverse.gd").new()
+	multiverse_scene.set("host",self)
+	add_child(multiverse_scene)
 	RenderingServer.set_default_clear_color(Color("05070d"))
 	music_player = AudioStreamPlayer.new()
 	var track := load("res://assets/determination.wav") as AudioStreamWAV
@@ -222,11 +226,14 @@ func next_wave() -> void:
 	say("gravidade. engraçado, né?" if gravity else "continua tentando.")
 
 func confirm() -> void:
+	if mode=="multiverse":
+		multiverse_scene.call("advance")
+		return
 	if mode.begins_with("dr_"):
 		cyber_confirm()
 		return
 	if mode=="escape_win":
-		start_crossover()
+		multiverse_scene.call("begin")
 		return
 	match mode:
 		"title", "dead", "win", "escape_win": start()
@@ -261,7 +268,7 @@ func confirm() -> void:
 func toggle_pause() -> void:
 	if mode == "paused":
 		mode = before_pause
-	elif mode in ["attack","menu","aim","fps","throw","explosion","dr_intro","dr_attack","dr_menu"]:
+	elif mode in ["attack","menu","aim","fps","throw","explosion","multiverse","dr_intro","dr_attack","dr_menu"]:
 		before_pause = mode
 		mode = "paused"
 	music_player.stream_paused = mode == "paused"
@@ -324,6 +331,9 @@ func spawn_hazard() -> void:
 
 func _process(delta: float) -> void:
 	var dt := minf(delta,0.033)
+	if mode=="multiverse":
+		queue_redraw()
+		return
 	if process_crossover(dt): return
 	if process_first_person(dt): return
 	if mode == "paused":
@@ -409,6 +419,7 @@ func draw_hazards() -> void:
 				if h.timer<1.48: skull(Vector2(254,h.y) if h.horizontal else Vector2(h.x,299),0.8,true)
 
 func _draw() -> void:
+	if mode=="multiverse" or (mode=="paused" and before_pause=="multiverse"): return
 	if draw_crossover(): return
 	if draw_first_person(): return
 	corridor()
@@ -481,6 +492,9 @@ var fp_flight := 0.0
 var fp_return := "attack"
 
 func toggle_first_person() -> void:
+	if mode.begins_with("dr_"):
+		say("TELETRANSPORTE BLOQUEADO PELO SPAMTON!")
+		return
 	if mode in ["attack","menu","aim"]:
 		fp_return = mode
 		mode = "fps"
@@ -497,7 +511,7 @@ func toss_sans() -> void:
 		return
 	mode = "throw"
 	fp_flight = 0
-	say("... isso não estava no roteiro.")
+	say("ISSO NÃO ESTÁ NO ROTEIRO!")
 
 func _input(event: InputEvent) -> void:
 	if mode == "fps" and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -532,9 +546,9 @@ func process_first_person(dt: float) -> bool:
 			p.p += p.v*dt
 			p.life -= dt
 		if impact_time>1.7:
-			mode = "escape_win"
 			hazards.clear()
 			hits = 8
+			multiverse_scene.call("begin")
 	queue_redraw()
 	return true
 
@@ -706,6 +720,7 @@ func process_crossover(dt: float) -> bool:
 	if not mode.begins_with("dr_"): return false
 	clock += dt
 	cyber_time += dt
+	message_time -= dt
 	if mode!="dr_attack":
 		queue_redraw()
 		return true
@@ -808,7 +823,7 @@ func draw_crossover() -> bool:
 			else: draw_colored_polygon(PackedVector2Array([b.p+Vector2(0,-8),b.p+Vector2(7,0),b.p+Vector2(0,8),b.p+Vector2(-7,0)]),Color("eda8d4") if b.kind else Color("8ce4ca"))
 		for shot in cyber_shots: r(shot.x-2,shot.y-9,4,15,GOLD)
 		if immunity<=0 or int(clock*16)%2==0: heart(soul,Color("ffe55d"),2.3)
-		label("SEGURE Z / ESPAÇO PARA ATIRAR",480,535,13,GOLD,true)
+		label(message if message_time>0 and message.begins_with("TELETRANSPORTE") else "SEGURE Z / ESPAÇO PARA ATIRAR",480,535,13,GOLD,true)
 	elif phase=="dr_menu":
 		label("* VOCÊ QUER SER UM [[BIG SHOT]]?",480,344,20,Color("e8d8f5"),true)
 		label("* Corte os fios. Ou faça um negócio.",480,380,15,Color("a99ec4"),true)

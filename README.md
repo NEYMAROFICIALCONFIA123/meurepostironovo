@@ -42,7 +42,7 @@ Durante uma onda, no menu ou na barra de ataque, aperte **E** (ou clique em **SA
 - **Setas** ou **arrastar com botão esquerdo**: olhar.
 - Aproxime-se do Sans a menos de 2 metros e olhe para ele.
 - **Espaço** ou **clique na web** / **botão direito no Godot**: arremessar Sans.
-- Sans voa e gira até o fim do corredor. No impacto, **explode em partículas**, com clarão e onda de choque, e abre uma **fenda para Deltarune**. Enter atravessa para o segundo encontro.
+- Sans voa e gira até o fim do corredor. No impacto, **explode em partículas**, com clarão e onda de choque, e lança o jogador automaticamente numa **viagem pelo multiverso** antes do segundo encontro.
 - **E** retorna à batalha antes do arremesso, preservando vida, itens, onda e obstáculos, com um segundo de invulnerabilidade.
 - **Esc** pausa também a primeira pessoa e o arremesso. O ataque remoto é bloqueado: é necessário chegar perto e mirar no Sans.
 
@@ -52,7 +52,20 @@ A câmera usa a mesma projeção 2.5D, agora com posição, rotação, altura e 
 
 Sim. É uma sequência alternativa de fã, não parte do cânone de nenhum dos jogos.
 
-Após a explosão, **Enter ou clique** entra na introdução da luta com **Spamton NEO**. Confirme novamente para começar:
+Ao lançar o Sans, surge **ISSO NÃO ESTÁ NO ROTEIRO!**. Depois do impacto e da explosão, começa automaticamente uma sequência de seis cenas originais em pixel art:
+
+1. **Homem-Aranha:** cidade em paralaxe, prédios iluminados e herói balançando na teia.
+2. **God of War:** montanhas, neve e guerreiro com machado.
+3. **Minecraft:** terreno de blocos em perspectiva, árvores e criatura verde.
+4. **Roblox:** avatar de blocos e plataformas de obby.
+5. **Garagem do Rick e Morty:** Rick dispara uma armadilha; a alma foge por outro portal e a captura falha.
+6. **Spamton NEO:** seus fios bloqueiam o portal, interrompem os saltos e iniciam automaticamente a luta.
+
+A viagem dura aproximadamente 29 segundos de animação. **Enter ou clique** avança a cena atual (após uma proteção de 0,65 s contra cliques acidentais); **Esc** pausa. A derrota no NEO reinicia só o segundo encontro, sem obrigar a rever a viagem. Durante a luta, tentar usar E exibe o bloqueio do teletransporte.
+
+São **vinhetas cinematográficas de homenagem**, não cópias completas ou versões jogáveis dos jogos citados. Personagens e marcas pertencem aos respectivos titulares; os desenhos procedurais são originais.
+
+Na luta com **Spamton NEO**:
 
 - **WASD / setas**: mover a alma amarela na nova arena.
 - **Segure Z ou Espaço**: atirar para cima. Acerte o corpo do NEO para romper seus fios (180 de resistência).
