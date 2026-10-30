@@ -9,7 +9,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci && npm run build:3d
-      - run: node --check web/game.js && node --check web/scene25d.js && node --check web/firstperson.js && node --check web/crossover.js && node --check web/multiverse.js && node --check web/voices.js && node tools/test-game.cjs && npm run test:procedural
+      - run: node --check web/game.js && node --check web/scene25d.js && node --check web/firstperson.js && node --check web/crossover.js && node --check web/multiverse.js && node --check web/voices.js && node tools/test-game.cjs && npm run test:procedural && npm run test:infinite
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.5.1

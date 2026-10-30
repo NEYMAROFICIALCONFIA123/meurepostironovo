@@ -5,13 +5,14 @@ import {
   mountainMesh,
 } from "./premium-worlds.js";
 import {blockAvatar,finishActor,refineNeo} from "./model-details.js";
-import {generateLayout} from "./world-layout.mjs";
+import {createInfiniteWorld} from "./infinite-world.mjs";
 import {buildProceduralDimension} from "./procedural-dimensions.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-let composer, renderPass, layout, runSeed = 1;
+let composer, renderPass, layout, stream, runSeed = 1;
+const chunkGroups=new Map();
 // True WebGL 3D. All geometry is generated locally; no models, CDNs or textures to fetch.
 let renderer,
   scene,
@@ -201,6 +202,7 @@ function setup(index) {
     }
     materials.clear();
     scene.traverse((o) => {
+      if(o.isInstancedMesh)o.dispose();
       if (o.isLight && o.shadow) o.shadow.dispose();
     });
   }
@@ -278,8 +280,25 @@ function setup(index) {
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.04;
   scene.add(sun);
-  layout=generateLayout(index,runSeed);
-  actors=buildProceduralDimension(layout,{box,cyl,orb,line,neon,group,mesh,mat,world,materials,scene,geometries,humanoid,neo,portal});
+  chunkGroups.clear();
+  let storyLoaded=false;
+  stream=createInfiniteWorld(index,runSeed,(plan,key)=>{
+    const before=new Set(world.children),oldGeometry=new Set(geometries),chunk=new THREE.Group();
+    const story=plan.chunkX===0&&plan.chunkZ===0&&!storyLoaded;
+    const made=buildProceduralDimension(plan,{story,box,cyl,orb,line,neon,group,mesh,mat,world,materials,scene,geometries,humanoid,neo,portal});
+    if(story){layout=plan;actors=made;storyLoaded=true;}
+    for(const object of [...world.children])if(!before.has(object)&&!Object.values(made).includes(object))chunk.add(object);
+    const actorGeometry=new Set();for(const actor of Object.values(made))actor.traverse?.(o=>{if(o.geometry)actorGeometry.add(o.geometry);});
+    chunk.userData.resources=[...geometries].filter(g=>!oldGeometry.has(g)&&!actorGeometry.has(g));
+    world.add(chunk);chunkGroups.set(key,chunk);
+  },(plan,key)=>{
+    const chunk=chunkGroups.get(key);if(!chunk)return;
+    chunk.traverse(o=>{if(o.isInstancedMesh)o.dispose();});
+    for(const geometry of chunk.userData.resources){geometry.dispose();geometries.delete(geometry);}
+    const groundKey=`generated-ground:${key}`;materials.get(groundKey)?.dispose();materials.delete(groundKey);
+    world.remove(chunk);chunkGroups.delete(key);
+  });
+  scene.fog=new THREE.Fog(scene.background, index===4?9:32,index===4?20:67);
   if (!composer) {
     composer = new EffectComposer(renderer);
     renderPass = new RenderPass(scene, camera);
@@ -311,9 +330,9 @@ function animate(age, dt, keys) {
   const norm = Math.hypot(side, forward) || 1;
   const dx=(Math.cos(look.x)*side-Math.sin(look.x)*forward)*step*speed/norm;
   const dz=(-Math.sin(look.x)*side-Math.cos(look.x)*forward)*step*speed/norm;
-  const next=layout.move(offset.x,offset.z+8,dx,dz);
+  const next=stream.move(offset.x,offset.z+8,dx,dz);
   offset.x=next.x;offset.z=next.z-8;
-  camera.position.set(next.x,layout.groundAt(next.x,next.z)+1.72,next.z);
+  camera.position.set(next.x,stream.groundAt(next.x,next.z)+1.72,next.z);
   camera.rotation.set(look.y,look.x,0,'YXZ');
   for (const actor of [actors.hero, actors.rick, actors.morty]) {
     if (actor && stage !== 0) {
@@ -322,7 +341,7 @@ function animate(age, dt, keys) {
         dist = Math.hypot(dx, dz);
       if (dist < 0.65 && dist > 0.001) {
         const tx=actor.position.x+dx/dist*.65,tz=actor.position.z+dz/dist*.65;
-        if(!layout.blocked(tx,tz)){camera.position.x=tx;camera.position.z=tz;offset.x=tx;offset.z=tz-8;camera.position.y=layout.groundAt(tx,tz)+1.72;}
+        if(!stream.blocked(tx,tz)){camera.position.x=tx;camera.position.z=tz;offset.x=tx;offset.z=tz-8;camera.position.y=stream.groundAt(tx,tz)+1.72;}
       }
     }
   }
@@ -389,14 +408,16 @@ window.Dimension3D = {
     runSeed=seed===undefined?(window.crypto?.getRandomValues?window.crypto.getRandomValues(new Uint32Array(1))[0]:(Math.random()*4294967296)>>>0):(Number(seed)>>>0);
     stage=-1;return runSeed;
   },
-  groundAt(x,z){return layout?.groundAt(x,z);},
+  groundAt(x,z){return stream?.groundAt(x,z);},
+  travel(x,z){if(!stream)return;stream.update(x,z);offset={x,z:z-8};camera.position.set(x,stream.groundAt(x,z)+1.72,z);},
+  streaming(){return stream?{center:stream.center(),chunks:stream.chunks.size,rendered:chunkGroups.size,geometries:geometries.size,gpuGeometries:renderer.info.memory.geometries}:null;},
   inspect(){return layout?{seed:runSeed,signature:layout.signature,cells:layout.terrainCells,props:layout.props,colliders:layout.colliders,bounds:layout.bounds}:null;},
   reset() {
     stage = -1;
   },
   stats() {
     return {
-      stage,seed:runSeed,signature:layout?.signature,cells:layout?.terrainCells,props:layout?.props.length,batches:world?.children.filter(o=>o.isInstancedMesh).length,
+      stage,seed:runSeed,signature:layout?.signature,cells:layout?.terrainCells,props:layout?.props.length,batches:[...chunkGroups.values()].reduce((n,g)=>n+g.children.filter(o=>o.isInstancedMesh).length,0),
       webgl: !!renderer,
       error: failure,
       objects: scene?.children[0]?.children.length,

@@ -1,5 +1,8 @@
 extends RefCounted
 ## Seeded finite layouts with complete terrain and a guaranteed clear main route.
+var origin := Vector2.ZERO
+var chunk := Vector2i.ZERO
+var streamed := false
 var stage := 0
 var seed_value := 1
 var half_x := 48
@@ -15,27 +18,31 @@ var spawn := Vector2(0,8)
 var portal_position := Vector2(0,-20)
 var rng := RandomNumberGenerator.new()
 
-func generate(index: int,run_seed: int) -> void:
+func generate(index: int,run_seed: int,chunk_pos: Vector2i=Vector2i.ZERO,is_streamed: bool=false) -> void:
+	chunk = chunk_pos
+	streamed = is_streamed
 	stage = index
 	seed_value = (run_seed ^ ((index+1)*7919)) & 0x7fffffff
-	rng.seed = seed_value
+	rng.seed = (seed_value ^ (chunk.x*374761393) ^ (chunk.y*668265263)) & 0x7fffffff
 	half_x = 12 if index==4 else 48
 	half_z = 18 if index==4 else 48
+	origin = Vector2(chunk.x*half_x*2,chunk.y*half_z*2)
 	nx = half_x
 	nz = half_z
-	bounds = Rect2(-half_x+2,-half_z+2,half_x*2-4,half_z*2-4)
+	bounds = Rect2(origin-Vector2(half_x,half_z),Vector2(half_x*2,half_z*2))
+	if not streamed: bounds = bounds.grow(-2)
 	portal_position = Vector2(0,-12 if index==4 else -20)
 	heights.clear()
 	props.clear()
 	colliders.clear()
 	for j in range(nz+1):
 		var row: Array[float] = []
-		for i in range(nx+1): row.append(natural_height(-half_x+i*2,-half_z+j*2))
+		for i in range(nx+1): row.append(natural_height(origin.x-half_x+i*2,origin.y-half_z+j*2))
 		heights.append(row)
 	var spacing := 4 if index==4 else 8
 	for z in range(-half_z+int(spacing/2.0),half_z,spacing):
 		for x in range(-half_x+int(spacing/2.0),half_x,spacing):
-			var p := Vector2(x+rng.randf_range(-0.15,0.15)*spacing,z+rng.randf_range(-0.15,0.15)*spacing)
+			var p := origin+Vector2(x+rng.randf_range(-0.15,0.15)*spacing,z+rng.randf_range(-0.15,0.15)*spacing)
 			if index==4:
 				if not reserved(p,1.2): add("machine" if rng.randf()>0.45 else "storage",p,Vector2(1.6,1.6))
 				continue
@@ -52,9 +59,9 @@ func generate(index: int,run_seed: int) -> void:
 		var z := -half_z+5.0
 		while z<half_z-3:
 			for side: int in [-1,1]:
-				if absf(z)>4: add(["streetlamp","rune","flower","railpost","storage","neonpost"][index],Vector2(side*(4.6+rng.randf()*0.5),z),Vector2.ONE*0.35,index!=2)
+				if absf(z)>4: add(["streetlamp","rune","flower","railpost","storage","neonpost"][index],origin+Vector2(side*(4.6+rng.randf()*0.5),z),Vector2.ONE*0.35,index!=2)
 			z += 6+rng.randf()*2
-	else:
+	elif not streamed:
 		var x := -9.0
 		while x<10:
 			add("cabinet",Vector2(x,-16),Vector2(2.3,1.3))
@@ -82,7 +89,8 @@ func natural_height(x: float,z: float) -> float:
 	var taper := clampf((minf(absf(x),absf(z))-3)/7,0,1)
 	return (noise(x*0.07,z*0.07)*(6 if stage==1 else 2.7)+noise(x*0.19,z*0.19)*0.55)*taper
 
-func ground_at(p: Vector2) -> float:
+func ground_at(world_position: Vector2) -> float:
+	var p := world_position-origin
 	var fx := (clampf(p.x,-half_x,half_x-0.00001)+half_x)/2
 	var fz := (clampf(p.y,-half_z,half_z-0.00001)+half_z)/2
 	var i := floori(fx)
@@ -106,7 +114,7 @@ func add(kind: String,p: Vector2,size: Vector2,solid: bool=true) -> Dictionary:
 	return model
 
 func blocked(p: Vector2,r: float=0.27) -> bool:
-	if not bounds.grow(-r).has_point(p): return true
+	if not streamed and not bounds.grow(-r).has_point(p): return true
 	for rect in colliders:
 		var closest := p.clamp(rect.position,rect.end)
 		if closest.distance_squared_to(p)<r*r: return true

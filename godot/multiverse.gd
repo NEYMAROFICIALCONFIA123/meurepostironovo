@@ -5,13 +5,15 @@ var stage := 0
 var age := 0.0
 var run_seed := 1
 var miss_spoken := false
+var morty_spoken := false
+var free_exploration := false
 var font: Font = ThemeDB.fallback_font
 var viewport_3d: SubViewport
 var dimension_world
 const TITLES := ["HOMEM-ARANHA", "GOD OF WAR", "MINECRAFT", "ROBLOX", "RICK E MORTY", "SPAMTON NEO"]
 const TAGS := ["NOVA YORK", "MIDGARD", "MUNDO DE BLOCOS", "OBBY IMPOSSÍVEL", "GARAGEM DO RICK", "DESTINO BLOQUEADO"]
 const LINES := ["Você atravessou a teia do multiverso.", "Até os deuses ficaram confusos com essa visita.", "Você quase virou um bloco de determinação.", "Checkpoint? Não. Outro teletransporte.", "Rick: uma alma fora do roteiro? Vou capturar você!", "VOCÊ NÃO VAI A LUGAR NENHUM, [[BIG SHOT]]!"]
-const DURATIONS := [16.0,16.0,17.0,16.0,23.0,18.0]
+const DURATIONS := [16.0,16.0,17.0,16.0,28.0,18.0]
 const COLORS := ["ed7185","8fdaec","b4e58b","f4cd70","b3ee75","ec9bd4"]
 
 func _ready() -> void:
@@ -29,6 +31,7 @@ func begin() -> void:
 	run_seed = randi()
 	host.play_voice("city")
 	miss_spoken = false
+	morty_spoken = false
 	stage = 0
 	age = 0
 	host.mode = "multiverse"
@@ -40,6 +43,7 @@ func advance() -> void:
 	if host.mode!="multiverse" or age<0.65: return
 	stage += 1
 	miss_spoken = false
+	morty_spoken = false
 	host.voice_player.stop()
 	if stage<6: host.play_voice(["city","snow","blocks","obby","rick","spamton"][stage])
 	age = 0
@@ -59,7 +63,10 @@ func _process(dt: float) -> void:
 		if stage==4 and age>11.3 and not miss_spoken:
 			miss_spoken = true
 			host.play_voice("rick-miss")
-		if age>=DURATIONS[stage]: advance()
+		if stage==4 and age>14.5 and not morty_spoken:
+			morty_spoken = true
+			host.play_voice("morty")
+		if not free_exploration and age>=DURATIONS[stage]: advance()
 	if (active or paused) and stage<6:
 		dimension_world.animate(age,minf(dt,0.05) if active else 0.0,active)
 		viewport_3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -69,6 +76,8 @@ func _process(dt: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if host.mode!="multiverse": return
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode==KEY_L:
+		free_exploration = not free_exploration
 	if event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:
 		advance()
 	if event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -103,8 +112,8 @@ func _draw() -> void:
 	txt("VOZ ORIGINAL EM PORTUGUÊS",480,524,12,Color("9bb6bd"),true)
 	for i in range(6):
 		r(330+i*52,546,43,3,c if i<stage else Color("30364b"))
-		if i==stage: r(330+i*52,546,43*age/DURATIONS[stage],3,c)
-	txt("WASD: EXPLORAR · ARRASTE / SETAS: OLHAR · ENTER: SALTAR · ESC: PAUSAR",480,577,12,Color("a7b5c9"),true)
+		if i==stage: r(330+i*52,546,43*minf(1,age/DURATIONS[stage]),3,c)
+	txt("L: EXPLORAÇÃO LIVRE · WASD: ANDAR · ARRASTE / SETAS: OLHAR · ENTER: SALTAR",480,577,12,Color("a7b5c9"),true)
 	if age<0.18: r(0,0,960,600,Color(c.r,c.g,c.b,(0.18-age)*3))
 	if host.mode=="paused":
 		r(0,0,960,600,Color("060910dd"))

@@ -9,6 +9,9 @@ var gaze := Vector2.ZERO
 var walk := Vector2.ZERO
 var layout
 var run_seed := 1
+var chunks: Dictionary = {}
+var chunk_center := Vector2i(999999,999999)
+var story_loaded := false
 
 func material(color: String, glow: bool=false) -> StandardMaterial3D:
 	var key := color+str(glow)
@@ -120,6 +123,9 @@ func build(index: int,seed_number: int=1) -> void:
 	if root: root.free()
 	palette.clear()
 	actors.clear()
+	chunks.clear()
+	chunk_center = Vector2i(999999,999999)
+	story_loaded = false
 	run_seed = seed_number
 	layout = preload("res://world_layout.gd").new()
 	layout.generate(index,run_seed)
@@ -140,6 +146,9 @@ func build(index: int,seed_number: int=1) -> void:
 	env.ambient_light_color = Color("b9d1df")
 	env.ambient_light_energy = 0.65
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.fog_enabled = true
+	env.fog_light_color = env.background_color
+	env.fog_density = 0.075 if index==4 else 0.025
 	var environment := WorldEnvironment.new()
 	environment.environment = env
 	root.add_child(environment)
@@ -152,7 +161,7 @@ func build(index: int,seed_number: int=1) -> void:
 	for side: int in [-1,1]:
 		block(Vector3(side*0.39,-0.43,-0.7),Vector3(0.13,0.22,0.19),"#d9bda3",camera)
 		block(Vector3(side*0.42,-0.61,-0.65),Vector3(0.18,0.25,0.22),"#344b70",camera)
-	actors = preload("res://procedural_dimension.gd").new().render(layout,self)
+	update_chunks(walk)
 
 func make_puppet() -> Dictionary:
 	actors.neo = group(Vector3(-1.5,1,-5))
@@ -184,8 +193,8 @@ func animate(age: float,dt: float,accept_input: bool) -> void:
 		var side := int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A))
 		var forward := int(Input.is_physical_key_pressed(KEY_W))-int(Input.is_physical_key_pressed(KEY_S))
 		var direction := Vector2(sin(gaze.x)*forward+cos(gaze.x)*side,-cos(gaze.x)*forward+sin(gaze.x)*side).normalized()
-		walk = layout.move_position(walk,direction*dt*(5 if Input.is_physical_key_pressed(KEY_SHIFT) else 3))
-	camera.position = Vector3(walk.x,layout.ground_at(walk)+1.72,walk.y)
+		walk = stream_move(walk,direction*dt*(5 if Input.is_physical_key_pressed(KEY_SHIFT) else 3))
+	camera.position = Vector3(walk.x,stream_ground(walk)+1.72,walk.y)
 	camera.rotation = Vector3(-gaze.y,-gaze.x,0)
 	for key: String in ["hero","rick","morty"]:
 		if actors.has(key) and scene_index!=0:
@@ -193,9 +202,9 @@ func animate(age: float,dt: float,accept_input: bool) -> void:
 			var delta := walk-Vector2(pos.x,pos.z)
 			if delta.length()<0.65 and delta.length()>0.001:
 				var corrected := Vector2(pos.x,pos.z)+delta.normalized()*0.65
-				if not layout.blocked(corrected):
+				if not stream_blocked(corrected):
 					walk = corrected
-					camera.position = Vector3(walk.x,layout.ground_at(walk)+1.72,walk.y)
+					camera.position = Vector3(walk.x,stream_ground(walk)+1.72,walk.y)
 	if actors.has("portal"): actors.portal.rotation.z = age*0.12
 	if scene_index==0:
 		actors.hero.position = Vector3(-2.4+sin(age*1.3)*1.5,3+cos(age*1.3)*0.6,-6)
@@ -216,3 +225,54 @@ func animate(age: float,dt: float,accept_input: bool) -> void:
 		actors.neo.position.y = 1+sin(age*2)*0.12
 		actors.lock.visible = age>1.8
 		actors.lock.rotation.z = age*0.2
+
+func chunk_at(p: Vector2) -> Vector2i:
+	var size := Vector2(24,36) if scene_index==4 else Vector2(96,96)
+	return Vector2i(floori((p.x+size.x/2)/size.x),floori((p.y+size.y/2)/size.y))
+
+func update_chunks(p: Vector2) -> void:
+	var center := chunk_at(p)
+	if center==chunk_center: return
+	chunk_center = center
+	for key: Vector2i in chunks.keys():
+		if absi(key.x-center.x)>1 or absi(key.y-center.y)>1:
+			chunks[key].node.free()
+			chunks.erase(key)
+	for z in range(-1,2):
+		for x in range(-1,2):
+			var key := center+Vector2i(x,z)
+			if chunks.has(key): continue
+			var plan = preload("res://world_layout.gd").new()
+			plan.generate(scene_index,run_seed,key,true)
+			var main_root := root
+			root = Node3D.new()
+			main_root.add_child(root)
+			var story: bool = key==Vector2i.ZERO and not story_loaded
+			var made: Dictionary = preload("res://procedural_dimension.gd").new().render(plan,self,story)
+			chunks[key] = {"plan":plan,"node":root}
+			if story:
+				actors = made
+				story_loaded = true
+				for actor in actors.values():
+					if actor is Node3D and actor.get_parent()==root: actor.reparent(main_root)
+			root = main_root
+
+func stream_ground(p: Vector2) -> float:
+	return chunks[chunk_at(p)].plan.ground_at(p)
+
+func stream_blocked(p: Vector2) -> bool:
+	var a := chunk_at(p-Vector2.ONE*0.27)
+	var b := chunk_at(p+Vector2.ONE*0.27)
+	for z in range(a.y,b.y+1):
+		for x in range(a.x,b.x+1):
+			if chunks.has(Vector2i(x,z)) and chunks[Vector2i(x,z)].plan.blocked(p): return true
+	return false
+
+func stream_move(p: Vector2,delta: Vector2) -> Vector2:
+	update_chunks(p)
+	var steps := maxi(1,ceili(delta.length()/0.15))
+	for i in range(steps):
+		if not stream_blocked(p+Vector2(delta.x/steps,0)): p.x += delta.x/steps
+		if not stream_blocked(p+Vector2(0,delta.y/steps)): p.y += delta.y/steps
+		update_chunks(p)
+	return p

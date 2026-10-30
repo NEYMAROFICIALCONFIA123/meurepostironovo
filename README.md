@@ -104,30 +104,33 @@ O cenário, sprite de fã, projéteis e interface são procedurais e originais; 
 - A câmera não gira, inclina ou avança sozinha. Mouse para cima olha para cima; mouse para baixo olha para baixo. WASD acompanha o rumo da câmera.
 - É uma melhoria procedural independente e estilizada, **não uma produção AAA fotorealista** com modelos escaneados, captura de movimento ou níveis de jogos comerciais.
 
-### Mundos gerados por seed — atualização procedural
+### Mundos infinitos por regiões — atualização de streaming
 
-Os seis ambientes agora são construídos por geradores, não por listas fixas de prédios e plataformas. Cada nova jornada sorteia uma seed, mostrada no HUD; terreno, distribuição de construções, vegetação, mobiliário e variantes de objetos mudam. Os personagens e acontecimentos da história continuam em pontos de referência para preservar a sequência narrativa.
+Os seis ambientes agora são construídos por geradores com carregamento de regiões ao redor do jogador, não por listas fixas de prédios e plataformas. Não há mais parede na borda do mapa: caminhar carrega novas regiões e descarta as distantes. Cada nova jornada sorteia uma seed, mostrada no HUD; terreno, distribuição de construções, vegetação, mobiliário e variantes de objetos mudam. Os personagens e acontecimentos da história continuam em pontos de referência para preservar a sequência narrativa.
 
-- Exterior: 96 × 96 metros, 2.304 células de piso; garagem: 24 × 36 metros, 216 células. São mapas **finitos**, não mundos infinitos por streaming.
+- Cada região exterior mede 96 × 96 metros (2.304 células); cada região do laboratório mede 24 × 36 metros (216 células). Nove regiões ao redor do jogador ficam carregadas. O mundo se estende proceduralmente em todas as direções; regiões descartadas são reproduzidas pela seed ao retornar. Como qualquer implementação com coordenadas numéricas, distâncias extremas estão sujeitas aos limites de precisão.
+- **L** alterna exploração livre e a sequência automática. Na exploração livre, o tempo não força a mudança de mundo; Enter continua avançando a história. WASD anda, Shift corre. O laboratório do Rick tem passagens abertas para as regiões vizinhas, em vez de paredes fechando a garagem.
 - Piso completo em toda a malha, inclusive no Roblox; floresta com relevo e Minecraft com blocos contíguos. A altura da câmera acompanha a mesma superfície renderizada.
-- Corredor protegido da entrada ao portal, limites de exploração e colisão horizontal com deslizamento/subpassos para evitar atravessar construções, árvores e pedras. Os espaços livres do caminho são intencionais.
+- Corredor protegido da entrada ao portal e colisão horizontal com deslizamento/subpassos para evitar atravessar construções, árvores e pedras. Os espaços livres do caminho são intencionais.
 - Centenas de elementos nos ambientes externos, com desenho instanciado (`InstancedMesh` na web / `MultiMesh` no Godot), em vez de uma chamada de renderização por objeto.
 - Na web: roupas com torso perfilado, Roblox arredondado com rosto/roupa/calçados e NEO com asas curvas chanfradas, articulações e dedos. A edição Godot mantém seus personagens estilizados e recebe o novo gerador e modelos ambientais.
 
-Fontes: `web/world-layout.mjs`, `web/procedural-dimensions.js`, `web/model-details.js`, `godot/world_layout.gd` e `godot/procedural_dimension.gd`. A seed reproduz o mapa dentro de cada implementação; o resultado não é idêntico entre Godot e navegador.
+Fontes: `web/world-layout.mjs`, `web/procedural-dimensions.js`, `web/model-details.js`, `godot/world_layout.gd` e `godot/procedural_dimension.gd` e `web/infinite-world.mjs`. A seed reproduz o mapa dentro de cada implementação; o resultado não é idêntico entre Godot e navegador.
 
 ```sh
 npm run test:procedural
+npm run test:infinite
 ```
 
-O teste cobre 384 mapas (64 seeds × 6 dimensões), 751.104 células, repetibilidade, variação entre seeds, densidade, caminho até o portal, colisões e limites. O teste WebGL continua verificando as seis cenas, a câmera e a sequência até NEO. O código nativo passou por análise sintática, mas não foi executado localmente no Godot.
+O teste cobre 384 mapas (64 seeds × 6 dimensões), 751.104 células, repetibilidade, variação entre seeds, densidade, caminho até o portal, colisões e limites. O teste infinito verifica 18.270 amostras de emendas, travessia de regiões, retorno determinístico e descarregamento (900 cargas / 846 descartes). O teste WebGL verifica também travessias a ±1.600 metros, contagem estável de recursos, exploração livre e fala do Morty, além de as seis cenas, a câmera e a sequência até NEO. O código nativo passou por análise sintática, mas não foi executado localmente no Godot.
 
 ### Falas em português, sem legendas de diálogo
 
-Nove arquivos Ogg locais em `web/audio/` e `godot/assets/voices/`: aviso do roteiro, narração dos quatro primeiros mundos, Rick, falha da captura, Spamton e bloqueio da fuga. São performances **sintéticas e originais**, escolhidas para o projeto; não são as vozes oficiais nem gravações extraídas das franquias.
+Dez arquivos Ogg locais em `web/audio/` e `godot/assets/voices/`: aviso do roteiro, narração dos quatro primeiros mundos, Rick, falha da captura, Morty, Spamton e bloqueio da fuga. São performances **sintéticas e originais**, escolhidas para o projeto; não são as vozes oficiais nem gravações extraídas das franquias.
 
 - O áudio começa após clicar em jogar ou em Dimensões 3D; não depende de serviço de voz online.
 - Cada salto interrompe a fala anterior. Rick reage à falha da captura aos 11,3 s da cena.
+- Morty tem uma performance separada, mais aguda e jovem, ajustada em aproximadamente dois semitons após a escolha da voz. Sua fala entra aos 14,5 s na garagem, após a falha do Rick, sem legenda de diálogo; a cena dura 28 s para comportar a fala. Não é imitação exata nem voz oficial.
 - Esc pausa e retoma a fala no ponto certo. M controla voz e música. A música baixa durante a fala.
 - Os diálogos narrativos/balões foram retirados da tela; nomes de mundos, menus, controles e avisos de estado continuam como interface.
 - O navegador decodifica os arquivos pelo Web Audio; a versão Godot usa AudioStreamPlayer.
@@ -148,7 +151,7 @@ npx playwright install chromium
 node tools/test-dimensions3d.cjs
 ```
 
-O teste verifica as seis cenas WebGL, eixos verticais da câmera, movimento, giro, arrastar sem pular, transição final para NEO, carregamento das nove vozes, pausa/retomada, mudo e reinício.
+O teste verifica as seis cenas WebGL, eixos verticais da câmera, movimento, giro, arrastar sem pular, transição final para NEO, carregamento das dez vozes, pausa/retomada, mudo e reinício.
 
 ## Corredor 2.5D anterior
 

@@ -104,7 +104,7 @@ export function premiumHumanoid(type, x, z, api) {
   }
   const mouth = rounded(0, 1.935, 0.175, 0.1, 0.025, 0.022, "#76544d", 0.01);
   g.userData.mouth = mouth;
-  g.userData.speaker = type === "rick" ? "rick" : "narrator";
+  g.userData.speaker = type === "rick" ? "rick" : type === "morty" ? "morty" : "narrator";
   if (type === "spider") {
     for (const side of [-1, 1]) {
       const eye = ell(

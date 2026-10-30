@@ -14,14 +14,14 @@ func e(p: Vector3,size: Vector3,c: String) -> void: part("box",p,size,c,true)
 func sphere(p: Vector3,size: Vector3,c: String) -> void: part("sphere",p,size,c)
 func cylinder(p: Vector3,r: float,h: float,c: String) -> void: part("cyl",p,Vector3(r,h,r),c)
 
-func render(plan,world) -> Dictionary:
+func render(plan,world,story: bool=true) -> Dictionary:
 	w = world
 	layout = plan
 	pools.clear()
 	if layout.stage==2:
 		for j in range(layout.nz):
 			for i in range(layout.nx):
-				var p := Vector2(-layout.half_x+i*2+1,-layout.half_z+j*2+1)
+				var p := layout.origin+Vector2(-layout.half_x+i*2+1,-layout.half_z+j*2+1)
 				var y: float = layout.ground_at(p)
 				b(Vector3(p.x,y-0.6,p.y),Vector3(2,1.2,2),"#806347")
 				b(Vector3(p.x,y-0.035,p.y),Vector3(2,0.07,2),"#6d9b50" if (i+j)%3 else "#7da659")
@@ -33,8 +33,8 @@ func render(plan,world) -> Dictionary:
 			for i in range(layout.nx):
 				# Same diagonal split as world_layout.gd.ground_at().
 				for offset: Vector2i in [Vector2i(0,0),Vector2i(1,0),Vector2i(0,1),Vector2i(1,0),Vector2i(1,1),Vector2i(0,1)]:
-					var x: float = -layout.half_x+(i+offset.x)*2
-					var z: float = -layout.half_z+(j+offset.y)*2
+					var x: float = layout.origin.x-layout.half_x+(i+offset.x)*2
+					var z: float = layout.origin.y-layout.half_z+(j+offset.y)*2
 					var c := color
 					if layout.stage==3: c = Color(["b19bd2","7cb7c5","c6ae88"][(i+j)%3])
 					elif layout.reserved(Vector2(x,z)): c *= 0.65 if layout.stage==0 else 1.06
@@ -47,24 +47,16 @@ func render(plan,world) -> Dictionary:
 		material.roughness = 0.9
 		terrain.material_override = material
 	for z in range(-layout.half_z+2,layout.half_z-2,2):
-		if layout.stage==0: b(Vector3(0,0.012,z),Vector3(0.09,0.015,0.7),"#d9c5a0")
-		elif layout.stage==1: b(Vector3(0,0.015,z),Vector3(1.3,0.035,1.1),"#98aeb3")
-		elif layout.stage==5: e(Vector3(0,0.02,z),Vector3(0.045,0.025,1.1),"#89bcba")
+		if layout.stage==0: b(Vector3(layout.origin.x,0.012,z+layout.origin.y),Vector3(0.09,0.015,0.7),"#d9c5a0")
+		elif layout.stage==1: b(Vector3(layout.origin.x,0.015,z+layout.origin.y),Vector3(1.3,0.035,1.1),"#98aeb3")
+		elif layout.stage==5: e(Vector3(layout.origin.x,0.02,z+layout.origin.y),Vector3(0.045,0.025,1.1),"#89bcba")
 	for p in layout.props: render_prop(p)
 	if layout.stage==4:
-		b(Vector3(0,3,-18.3),Vector3(25,6,0.5),"#71887e")
-		b(Vector3(0,3,18.3),Vector3(25,6,0.5),"#647d78")
-		b(Vector3(0,6.1,0),Vector3(25,0.25,37),"#87988b")
-		for side: int in [-1,1]: b(Vector3(side*12.2,3,0),Vector3(0.5,6,37),"#617c73")
+		b(Vector3(layout.origin.x,6.1,layout.origin.y),Vector3(24,0.25,36),"#87988b")
 		for z in range(-14,17,4):
-			b(Vector3(0,5.8,z),Vector3(22,0.18,0.3),"#4b655f")
-			for x: int in [-5,5]: e(Vector3(x,5.68,z),Vector3(3,0.08,0.2),"#d4e3d1")
-	else:
-		for side: int in [-1,1]:
-			b(Vector3(side*48.8,2,0),Vector3(1.5,5,99),"#61757d")
-			b(Vector3(0,2,side*48.8),Vector3(99,5,1.5),"#61757d")
+			for x: int in [-5,5]: e(Vector3(layout.origin.x+x,5.68,layout.origin.y+z),Vector3(3,0.08,0.2),"#d4e3d1")
 	flush()
-	return make_actors()
+	return make_actors() if story else {}
 
 func render_prop(p: Dictionary) -> void:
 	var x: float = p.x

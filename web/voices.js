@@ -15,6 +15,7 @@ window.GameVoices = (() => {
     loading = new Map();
   const roles = {
     rick: "rick",
+    morty: "morty",
     "rick-miss": "rick",
     spamton: "spamton",
     locked: "spamton",
@@ -82,6 +83,7 @@ window.GameVoices = (() => {
         "obby",
         "rick",
         "rick-miss",
+        "morty",
         "spamton",
         "locked",
       ])

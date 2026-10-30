@@ -1,5 +1,5 @@
 // Pure seeded generation. Shared by rendering, collision, diagnostics and CPU tests.
-// The traversable surface is finite, completely tiled, and bordered; not an infinite world.
+// Deterministic chunks: shared world-coordinate noise keeps adjoining terrain seamless.
 export function hash32(value) {
   value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
   value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
@@ -9,11 +9,12 @@ export function random(seed) {
   let state = seed >>> 0;
   return () => { state = (state + 0x6d2b79f5) >>> 0; let n = state; n = Math.imul(n ^ (n >>> 15), n | 1); n ^= n + Math.imul(n ^ (n >>> 7), n | 61); return ((n ^ (n >>> 14)) >>> 0) / 4294967296; };
 }
-export function generateLayout(stage, runSeed) {
-  const seed = hash32((runSeed >>> 0) ^ Math.imul(stage + 1, 7919)), rng = random(seed);
+export function generateLayout(stage, runSeed, options = {}) {
+  const seed = hash32((runSeed >>> 0) ^ Math.imul(stage + 1, 7919)), rng = random(hash32(seed ^ Math.imul(options.chunkX||0,374761393) ^ Math.imul(options.chunkZ||0,668265263)));
   const indoor = stage === 4, halfX = indoor ? 12 : 48, halfZ = indoor ? 18 : 48, cell = 2;
+  const originX=(options.chunkX||0)*halfX*2,originZ=(options.chunkZ||0)*halfZ*2;
   const nx = halfX, nz = halfZ, props = [], colliders = [], buckets = new Map();
-  const bounds = {minX:-halfX+2,maxX:halfX-2,minZ:-halfZ+2,maxZ:halfZ-2};
+  const bounds = {minX:originX-halfX+(options.streamed?0:2),maxX:originX+halfX-(options.streamed?0:2),minZ:originZ-halfZ+(options.streamed?0:2),maxZ:originZ+halfZ-(options.streamed?0:2)};
   function noise(x,z) {
     const ix=Math.floor(x), iz=Math.floor(z), sx=x-ix, sz=z-iz, u=sx*sx*(3-2*sx),v=sz*sz*(3-2*sz);
     const n=(a,b)=>hash32(seed ^ Math.imul(a,374761393) ^ Math.imul(b,668265263))/4294967295;
@@ -25,9 +26,9 @@ export function generateLayout(stage, runSeed) {
     const taper=Math.min(1,Math.max(0,(Math.min(Math.abs(x),Math.abs(z))-3)/7));
     return (noise(x*.07,z*.07)*(stage===1?6:2.7)+noise(x*.19,z*.19)*.55)*taper;
   }
-  const heights=Array.from({length:nz+1},(_,j)=>Array.from({length:nx+1},(_,i)=>naturalHeight(-halfX+i*cell,-halfZ+j*cell)));
+  const heights=Array.from({length:nz+1},(_,j)=>Array.from({length:nx+1},(_,i)=>naturalHeight(originX-halfX+i*cell,originZ-halfZ+j*cell)));
   function groundAt(x,z) {
-    x=Math.max(-halfX,Math.min(halfX-.00001,x));z=Math.max(-halfZ,Math.min(halfZ-.00001,z));
+    x=Math.max(-halfX,Math.min(halfX-.00001,x-originX));z=Math.max(-halfZ,Math.min(halfZ-.00001,z-originZ));
     const fx=(x+halfX)/cell,fz=(z+halfZ)/cell,i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j;
     if(stage===2)return Math.floor((heights[j][i]+heights[j][i+1]+heights[j+1][i]+heights[j+1][i+1])/4*2)/2;
     const a=heights[j][i],b=heights[j][i+1],c=heights[j+1][i],d=heights[j+1][i+1];
@@ -46,7 +47,7 @@ export function generateLayout(stage, runSeed) {
   // Jittered stratified placement: every unreserved district receives a primary model.
   // Randomness changes layouts, dimensions, silhouettes and details, not just colors.
   for(let z=-halfZ+spacing/2;z<halfZ;z+=spacing)for(let x=-halfX+spacing/2;x<halfX;x+=spacing){
-    const px=x+(rng()-.5)*spacing*.3,pz=z+(rng()-.5)*spacing*.3;
+    const px=originX+x+(rng()-.5)*spacing*.3,pz=originZ+z+(rng()-.5)*spacing*.3;
     if(indoor){if(!reserved(px,pz,1.2))add(rng()>.45?'machine':'storage',px,pz,1.6,1.6);continue;}
     if(reserved(px,pz,stage===0?2.8:stage===5?1.5:stage===3?1.2:.6))continue;
     const kind=['building',rng()>.35?'pine':'boulder',rng()>.18?'oak':'boulder',rng()>.5?'pavilion':'pillar','storage',rng()>.35?'tower':'conduit'][stage];
@@ -58,15 +59,15 @@ export function generateLayout(stage, runSeed) {
   }
   // Procedurally spaced route furniture stays outside the collision-free central lane.
   if(!indoor)for(let z=-halfZ+5;z<halfZ-3;z+=6+rng()*2)for(const side of[-1,1]){
-    const x=side*(4.6+rng()*.5);if(Math.abs(z)<4)continue;
-    add(stage===0?'streetlamp':stage===1?'rune':stage===2?'flower':stage===3?'railpost':'neonpost',x,z,.35,.35,stage!==2);
+    const x=originX+side*(4.6+rng()*.5);if(Math.abs(z+originZ)<4)continue;
+    add(stage===0?'streetlamp':stage===1?'rune':stage===2?'flower':stage===3?'railpost':'neonpost',x,z+originZ,.35,.35,stage!==2);
   }
-  if(indoor){
+  if(indoor&&!options.streamed){
     for(let x=-9;x<10;x+=2.6){add('cabinet',x,-16,2.3,1.3);add('bottle',x,-15.5,.25,.25,false);}
     for(let z=-12;z<16;z+=3.4)for(const side of[-1,1])add('cabinet',side*10.8,z,1,2.6);
   }
   function blocked(x,z,r=.27) {
-    if(x-r<bounds.minX||x+r>bounds.maxX||z-r<bounds.minZ||z+r>bounds.maxZ)return true;
+    if(!options.streamed&&(x-r<bounds.minX||x+r>bounds.maxX||z-r<bounds.minZ||z+r>bounds.maxZ))return true;
     const nearby=new Set();for(let bx=Math.floor((x-r)/8);bx<=Math.floor((x+r)/8);bx++)for(let bz=Math.floor((z-r)/8);bz<=Math.floor((z+r)/8);bz++)for(const c of buckets.get(bx+','+bz)||[])nearby.add(c);
     for(const c of nearby){const dx=Math.max(Math.abs(x-c.x)-c.hx,0),dz=Math.max(Math.abs(z-c.z)-c.hz,0);if(dx*dx+dz*dz<r*r)return true;}return false;
   }
@@ -74,5 +75,5 @@ export function generateLayout(stage, runSeed) {
     const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.15));for(let n=0;n<steps;n++){if(!blocked(x+dx/steps,z,r))x+=dx/steps;if(!blocked(x,z+dz/steps,r))z+=dz/steps;}return {x,z};
   }
   const signature=hash32(props.reduce((n,p)=>n^hash32(Math.round(p.x*100)+Math.round(p.z*100)*7919+p.variant*71),seed));
-  return {stage,seed,runSeed:runSeed>>>0,cell,nx,nz,halfX,halfZ,bounds,heights,props,colliders,groundAt,reserved,blocked,move,signature,spawn:{x:0,z:8},portal:{x:0,z:indoor?-12:-20},terrainCells:nx*nz};
+  return {stage,seed,originX,originZ,streamed:!!options.streamed,chunkX:options.chunkX||0,chunkZ:options.chunkZ||0,runSeed:runSeed>>>0,cell,nx,nz,halfX,halfZ,bounds,heights,props,colliders,groundAt,reserved,blocked,move,signature,spawn:{x:0,z:8},portal:{x:0,z:indoor?-12:-20},terrainCells:nx*nz};
 }
