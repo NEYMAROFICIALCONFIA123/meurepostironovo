@@ -60,5 +60,5 @@ run('state="dr_menu";dr.sel=0;dr.enemy=20;drConfirm()');assert.equal(run('state'
 console.log('PASS: impact explosion, portal, crossover intro, shooting, damage/death/retry, healing, NEO victory and full restart.');
 
 run('startMultiverse();for(let i=0;i<6;i++){mv.age=1;draw();mvNext()}');assert.equal(run('state'),'dr_attack');assert.equal(run('mv.active'),false);
-run('startMultiverse();mv.age=.2;mvNext()');assert.equal(run('mv.stage'),0,'Ignore accidental double-skip');run('pause();update(1)');assert.equal(run('mv.age'),.2,'Cutscene must pause');run('pause();for(let i=0;i<1600;i++)update(.02)');assert.equal(run('mv.active'),false,'All jumps must automatically lead into NEO battle');
+run('startMultiverse();mv.age=.2;mvNext()');assert.equal(run('mv.stage'),0,'Ignore accidental double-skip');run('pause();update(1)');assert.equal(run('mv.age'),.2,'Cutscene must pause');run('pause();for(let i=0;i<2700;i++)update(.02)');assert.equal(run('mv.active'),false,'All jumps must automatically lead into NEO battle');
 console.log('PASS: all six multiverse scenes render, guarded manual skip, pause, automatic timeline and Spamton lockdown/battle.');
