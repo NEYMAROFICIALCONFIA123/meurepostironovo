@@ -1,5 +1,5 @@
 extends Node2D
-## LAST BREATH: self-contained Godot 4 fan encounter. No external assets needed.
+## LAST BREATH: projected 2.5D geometry with pixel-art sprites and 2D collision.
 const ARENA := Rect2(280, 326, 400, 162)
 const WHITE := Color("e6e6e9")
 const GOLD := Color("efbb77")
@@ -68,7 +68,7 @@ func skull(pos: Vector2, s: float = 2.6, glowing: bool = false) -> void:
 		draw_rect(Rect2(pos + Vector2(i,9)*s, Vector2(1,4)*s), Color("343845"))
 
 func sans() -> void:
-	var y := 210 + sin(clock * 2) * 2
+	var y := 180 + sin(clock * 2) * 2
 	r(443,y+69,29,43,Color("171b2a"))
 	r(488,y+69,29,43,Color("171b2a"))
 	r(432,y+107,45,15,Color("b8bdcf"))
@@ -86,37 +86,93 @@ func sans() -> void:
 	r(428,y+70,24,13,WHITE)
 	r(511,y+70,24,13,WHITE)
 	r(440,y+81,81,13,Color("202535"))
+	r(425,y+36,6,32,Color("79b4d9"))
+	r(526,y+36,6,32,Color("244269"))
+	r(443,y+44,15,5,Color("254d7a"))
+	r(503,y+44,15,5,Color("254d7a"))
+	r(449,y+89,5,21,Color("394359"))
+	r(490,y+89,5,21,Color("394359"))
 	skull(Vector2(480, y-18), 2.6, gravity or wave >= 4)
 
+# Perspective-projected world coordinates; sprites and collision remain on a 2D plane.
+func project_25(p: Vector3) -> Vector2:
+	var pointer := get_global_mouse_position() / Vector2(960,600) - Vector2(0.5,0.5)
+	return Vector2(480+(p.x-pointer.x*7)*470/p.z,111+(119-p.y+pointer.y*3)*470/p.z).round()
+
+func face_25(points: Array, color: Color) -> void:
+	var screen := PackedVector2Array()
+	for p: Vector3 in points:
+		screen.append(project_25(p))
+	draw_colored_polygon(screen,color)
+
+func block_25(x: float, y: float, z: float, w: float, h: float, d: float, front: Color, side: Color, top: Color) -> void:
+	face_25([Vector3(x,y,z),Vector3(x+w,y,z),Vector3(x+w,y+h,z),Vector3(x,y+h,z)],front)
+	face_25([Vector3(x+w,y,z),Vector3(x+w,y,z+d),Vector3(x+w,y+h,z+d),Vector3(x+w,y+h,z)],side)
+	face_25([Vector3(x,y,z+d),Vector3(x,y,z),Vector3(x,y+h,z),Vector3(x,y+h,z+d)],side)
+	face_25([Vector3(x,y+h,z),Vector3(x+w,y+h,z),Vector3(x+w,y+h,z+d),Vector3(x,y+h,z+d)],top)
+
 func corridor() -> void:
-	r(0,0,960,600,Color("05070d"))
-	r(0,0,960,280,Color("13111b"))
+	r(0,0,960,600,Color("060914"))
+	r(0,0,960,324,Color("15182b"))
+	var arch_colors := ["39334d","191b32","51445f","202039","6c5266","27253e","a57979"]
 	for i in range(7):
-		var x := 32 + i * 146
-		r(x,0,32,277,Color("211b29"))
-		r(x+5,0,5,277,Color("362938"))
-		r(x+28,0,4,277,Color("0d0d16"))
-		r(x-9,246,50,11,Color("2a2431"))
-		r(x-14,257,60,12,Color("201c29"))
-		r(x-19,270,70,9,Color("302632"))
-		r(x-10,52,52,8,Color("282130"))
-		if i < 6:
-			r(x+51,89,43,82,Color("362939"))
-			r(x+56,96,33,68,Color("5b3b49"))
-			r(x+69,94,6,73,Color("211c2a"))
-			r(x+54,126,39,6,Color("221c2b"))
-			draw_arc(Vector2(x+73,89),22,PI,TAU,16,Color("443040"),5)
-	r(0,279,960,3,Color("665046"))
-	r(0,284,960,34,Color("15131e"))
-	for x in range(-400, 1400, 110):
-		draw_line(Vector2(480+(x-480)*0.32,286),Vector2(x,330),Color("28212b"))
-	for y in range(292,324,10):
-		r(0,y,960,1,Color("27212a"))
-	for i in range(34):
-		var x := fposmod(i*127.3+sin(clock*0.2+i)*18,960)
-		var y := fposmod(i*73.1-clock*7,280)
-		r(x,y,2,2,Color("77667e44"))
+		var inset := i*11
+		r(320+inset,-60+inset,320-inset*2,248-inset,Color(arch_colors[i]))
+	r(399,17,162,156,Color("302b47"))
+	r(409,25,142,141,Color("b3777e"))
+	r(418,32,124,128,Color("e4aa89"))
+	var glass := ["dca187","b37b87","775b83","dfb58e","8c7199"]
+	for row in range(7):
+		for col in range(7):
+			r(427+col*15,40+row*16,13,14,Color(glass[(col+row*2)%5]))
+	r(477,25,6,140,Color("41364c"))
+	r(409,93,142,5,Color("41364c"))
+	for z in range(1800,149,-90):
+		for x in range(-720,720,90):
+			var tile_color := Color("282839") if (int(x/90.0)+int(z/90.0))%2==0 else Color("1b2031")
+			face_25([Vector3(x,0,z),Vector3(x+88,0,z),Vector3(x+88,0,z+88),Vector3(x,0,z+88)],tile_color)
+	for z in range(1000,239,-25):
+		var point := project_25(Vector3(0,0.5,z))
+		var w := 70.0*470/z
+		r(point.x-w/2+sin(z*0.17)*5,point.y,w,2,Color("e9ba8b18"))
+	draw_colored_polygon(PackedVector2Array([Vector2(418,65),Vector2(443,70),Vector2(320,324),Vector2(150,324)]),Color("b9876b13"))
+	draw_colored_polygon(PackedVector2Array([Vector2(491,46),Vector2(522,50),Vector2(788,324),Vector2(547,324)]),Color("b9baf11a"))
+	for z: int in [1100,820,580,390,255]:
+		for side: int in [-1,1]:
+			var x := side*255-21
+			block_25(x-15,0,z-10,72,8,55,Color("534155"),Color("252239"),Color("827087"))
+			block_25(x-9,8,z-6,60,10,47,Color("44374e"),Color("211e32"),Color("6f5970"))
+			block_25(x,18,z,42,205,36,Color("49415b"),Color("23263d"),Color("736780"))
+			block_25(x+5,20,z-0.4,5,197,1,Color("8e7284"),Color("55445f"),Color("ae8a91"))
+			block_25(x+30,20,z-0.5,5,197,1,Color("2d2b44"),Color("22253d"),Color("64506c"))
+			block_25(x-7,219,z-5,56,9,46,Color("65516b"),Color("30273f"),Color("9b7e87"))
+			block_25(x-14,228,z-9,70,10,53,Color("70586f"),Color("30273e"),Color("ad8590"))
+			var point := project_25(Vector3(x+20,117,z-4))
+			var s := 470.0/z
+			r(point.x-3*s,point.y,6*s,14*s,Color("6e5064"))
+			r(point.x-2*s,point.y-6*s,4*s,9*s,Color("f5c79a"))
+	# Elliptical contact shadow pins the sprite to the projected floor.
+	var shadow := PackedVector2Array()
+	for i in range(32):
+		shadow.append(Vector2(480+cos(i*TAU/32)*76,318+sin(i*TAU/32)*12))
+	draw_colored_polygon(shadow,Color("03071699"))
 	sans()
+	for i in range(56):
+		var x := fposmod(i*131.71+sin(clock*0.23+i)*12,960)
+		var y := fposmod(i*59.3-clock*(3+i%5),320)
+		r(x,y,2 if i%7==0 else 1,2 if i%7==0 else 1,Color("f8d2aa70") if i%3==0 else Color("9aaada44"))
+	# Opaque lower UI plane hides foreground projection beyond the stage.
+	r(0,324,960,276,Color("060914"))
+
+func arena_25() -> void:
+	draw_colored_polygon(PackedVector2Array([Vector2(277,323),Vector2(683,323),Vector2(699,308),Vector2(261,308)]),Color("43445e"))
+	draw_colored_polygon(PackedVector2Array([Vector2(261,308),Vector2(277,323),Vector2(277,491),Vector2(261,475)]),Color("191f34"))
+	draw_colored_polygon(PackedVector2Array([Vector2(683,323),Vector2(699,308),Vector2(699,475),Vector2(683,491)]),Color("10182c"))
+	draw_colored_polygon(PackedVector2Array([Vector2(277,491),Vector2(683,491),Vector2(699,505),Vector2(261,505)]),Color("141d30"))
+	r(263,309,434,2,Color("9b849d"))
+	for p: Vector2 in [Vector2(265,313),Vector2(688,313),Vector2(265,481),Vector2(688,481)]:
+		r(p.x,p.y,7,7,Color("a597ab"))
+		r(p.x+2,p.y+2,3,3,Color("292e44"))
 
 func bone(x: float, y: float, h: float, color: Color = WHITE) -> void:
 	if h <= 0:
@@ -338,7 +394,7 @@ func _draw() -> void:
 	if mode == "title":
 		r(170,335,620,230,Color("090c14ee"))
 		label("LAST BREATH",480,387,48,GOLD,true)
-		label("UM ENCONTRO COM SANS",480,417,13,WHITE,true)
+		label("UM ENCONTRO COM SANS · 2.5D",480,417,13,WHITE,true)
 		label("[ ENTER ]  ENCARAR O SANS",480,469,21,WHITE,true)
 		label("WASD / SETAS: MOVER   Z: CONFIRMAR   ESC: PAUSAR",480,514,12,Color("858d9e"),true)
 		label("T: TREINO   M: MÚSICA   F: TELA CHEIA",480,538,12,CYAN,true)
@@ -350,6 +406,7 @@ func _draw() -> void:
 	label("TURNO %02d" % (wave+1),75,347,11,Color("6d7688"))
 	label("ALMA AZUL" if gravity else "ALMA VERMELHA",742,347,11,CYAN if gravity else RED)
 	label("%d / 8" % hits,795,369,12,Color("6d7688"))
+	arena_25()
 	r(277,323,406,168,Color("b9c3d6"))
 	r(280,326,400,162,Color("030509"))
 	if mode == "attack" or (mode == "paused" and before_pause == "attack"):

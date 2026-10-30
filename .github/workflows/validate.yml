@@ -8,7 +8,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check web/game.js && node tools/test-game.cjs
+      - run: node --check web/game.js && node --check web/scene25d.js && node tools/test-game.cjs
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.5.1

@@ -1,6 +1,6 @@
 # LAST BREATH — A Sans Encounter
 
-Batalha de fã em **Godot 4**, com uma prévia independente para navegador. Um encontro inspirado na luta do Sans de UNDERTALE, não uma recriação do jogo completo.
+Batalha de fã **2.5D** em **Godot 4**, com uma prévia independente para navegador. Um encontro inspirado na luta do Sans de UNDERTALE, não uma recriação do jogo completo.
 
 ## Jogar no Godot
 
@@ -45,6 +45,12 @@ Na web, use o seletor NORMAL/TREINO. Mouse/toque também seleciona ações; arra
 - Pausa, derrota, vitória, reinício, modo treino, partículas e música em loop.
 
 É um encontro próprio, compacto: não inclui exploração, história completa ou reprodução exata de todas as fases do Sans original.
+
+## Visual 2.5D
+
+A edição 2.5D combina **geometria projetada em perspectiva** com sprites em pixel art e colisão 2D. O corredor tem piso quadriculado em profundidade, pilares extrudados com faces iluminadas, capitéis e bases, vitral, feixes de luz, sombras de contato e partículas. Na web há também reflexo estilizado no mármore, névoa, vinheta e paralaxe suave com o ponteiro. A arena ganha uma moldura chanfrada com volume, mas seu plano frontal permanece sem distorção: os ataques e suas colisões continuam legíveis.
+
+É uma renderização híbrida 2.5D procedural, não movimentação livre em um mundo 3D. No Godot usa Node2D e projeção matemática; na prévia, Canvas. Não requer modelos ou texturas externos.
 
 ## Arte e música
 

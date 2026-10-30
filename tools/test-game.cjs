@@ -11,6 +11,7 @@ function element(id) {
 }
 const sandbox = {console, Math, Set, document:{querySelector:element,addEventListener:noop},window:{addEventListener:noop},requestAnimationFrame:noop,setInterval:noop};
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync('web/scene25d.js','utf8'),sandbox);
 vm.runInContext(fs.readFileSync('web/game.js','utf8'),sandbox);
 const run = s => vm.runInContext(s,sandbox);
 run('audio={resume:()=>{}};muted=true;start(); practice=true;');
