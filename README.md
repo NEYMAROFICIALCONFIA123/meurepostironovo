@@ -34,6 +34,20 @@ Abra `http://localhost:3000`. Esta versão usa **Canvas 2D + Web Audio**, não �
 
 Na web, use o seletor NORMAL/TREINO. Mouse/toque também seleciona ações; arrastar move a alma vermelha. **Teclado é recomendado**, especialmente para os saltos da alma azul.
 
+## Fora da caixa: primeira pessoa e vitória alternativa
+
+Durante uma onda, no menu ou na barra de ataque, aperte **E** (ou clique em **SAIR DA CAIXA** na prévia). A batalha é suspensa exatamente onde estava e a câmera entra no corredor em primeira pessoa.
+
+- **WASD**: andar; **Shift**: correr.
+- **Setas** ou **arrastar com botão esquerdo**: olhar.
+- Aproxime-se do Sans a menos de 2 metros e olhe para ele.
+- **Espaço** ou **clique na web** / **botão direito no Godot**: arremessar Sans.
+- Sans voa, gira e se afasta pelo corredor; após a animação, aparece uma **vitória alternativa**. Enter reinicia.
+- **E** retorna à batalha antes do arremesso, preservando vida, itens, onda e obstáculos, com um segundo de invulnerabilidade.
+- **Esc** pausa também a primeira pessoa e o arremesso. O ataque remoto é bloqueado: é necessário chegar perto e mirar no Sans.
+
+A câmera usa a mesma projeção 2.5D, agora com posição, rotação, altura e recorte de geometria no plano próximo. Não precisa de ponteiro capturado.
+
 ## O encontro
 
 - 92 HP, dano de 5 com breve invulnerabilidade, 3 tortas que curam 38 HP.

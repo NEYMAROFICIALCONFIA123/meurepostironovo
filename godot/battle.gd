@@ -188,6 +188,10 @@ func say(s: String) -> void:
 	message_time = 2.5
 
 func start() -> void:
+	fp_position = Vector2(0,680)
+	fp_yaw = 0
+	fp_pitch = 0
+	fp_flight = 0
 	mode = "attack"
 	wave = 0
 	hits = 0
@@ -218,7 +222,7 @@ func next_wave() -> void:
 
 func confirm() -> void:
 	match mode:
-		"title", "dead", "win": start()
+		"title", "dead", "win", "escape_win": start()
 		"paused": toggle_pause()
 		"aim":
 			if absf(cursor-0.5)<0.35:
@@ -250,7 +254,7 @@ func confirm() -> void:
 func toggle_pause() -> void:
 	if mode == "paused":
 		mode = before_pause
-	elif mode in ["attack","menu","aim"]:
+	elif mode in ["attack","menu","aim","fps","throw"]:
 		before_pause = mode
 		mode = "paused"
 	music_player.stream_paused = mode == "paused"
@@ -259,6 +263,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
 	match event.keycode:
+		KEY_E: toggle_first_person()
+		KEY_SPACE: toss_sans()
 		KEY_ENTER, KEY_Z: confirm()
 		KEY_ESCAPE: toggle_pause()
 		KEY_X:
@@ -307,6 +313,7 @@ func spawn_hazard() -> void:
 
 func _process(delta: float) -> void:
 	var dt := minf(delta,0.033)
+	if process_first_person(dt): return
 	if mode == "paused":
 		queue_redraw()
 		return
@@ -390,6 +397,7 @@ func draw_hazards() -> void:
 				if h.timer<1.48: skull(Vector2(254,h.y) if h.horizontal else Vector2(h.x,299),0.8,true)
 
 func _draw() -> void:
+	if draw_first_person(): return
 	corridor()
 	if mode == "title":
 		r(170,335,620,230,Color("090c14ee"))
@@ -397,7 +405,7 @@ func _draw() -> void:
 		label("UM ENCONTRO COM SANS · 2.5D",480,417,13,WHITE,true)
 		label("[ ENTER ]  ENCARAR O SANS",480,469,21,WHITE,true)
 		label("WASD / SETAS: MOVER   Z: CONFIRMAR   ESC: PAUSAR",480,514,12,Color("858d9e"),true)
-		label("T: TREINO   M: MÚSICA   F: TELA CHEIA",480,538,12,CYAN,true)
+		label("E: SAIR DA CAIXA / PRIMEIRA PESSOA · T: TREINO · M: SOM",480,538,12,CYAN,true)
 		return
 	if message_time>0:
 		r(568,155,314,52,Color("e6e5e0"))
@@ -450,3 +458,152 @@ func _draw() -> void:
 		label("PAUSADO",480,267,40,GOLD,true)
 		label("respire. você ainda está aqui.",480,314,18,WHITE,true)
 		label("ENTER / ESC PARA CONTINUAR",480,364,17,WHITE,true)
+
+
+# Movable first-person camera and an alternate, physics-styled ending.
+var fp_position := Vector2(0,680)
+var fp_yaw := 0.0
+var fp_pitch := 0.0
+var fp_flight := 0.0
+var fp_return := "attack"
+
+func toggle_first_person() -> void:
+	if mode in ["attack","menu","aim"]:
+		fp_return = mode
+		mode = "fps"
+		say("... ei. você não pode sair da caixa.")
+	elif mode == "fps":
+		mode = fp_return
+		immunity = 1
+
+func toss_sans() -> void:
+	if mode != "fps": return
+	var delta := Vector2(0,300)-fp_position
+	if delta.length()>195 or delta.normalized().dot(Vector2(sin(fp_yaw),-cos(fp_yaw)))<0.8:
+		say("chegue perto e olhe para o Sans.")
+		return
+	mode = "throw"
+	fp_flight = 0
+	say("... isso não estava no roteiro.")
+
+func _input(event: InputEvent) -> void:
+	if mode == "fps" and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		fp_yaw += event.relative.x*0.004
+		fp_pitch = clampf(fp_pitch+event.relative.y*0.6,-100,100)
+	if mode == "fps" and event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:
+		toss_sans()
+
+func process_first_person(dt: float) -> bool:
+	if mode not in ["fps","throw","escape_win"]: return false
+	clock += dt
+	message_time -= dt
+	if mode == "fps":
+		var forward := float(int(Input.is_physical_key_pressed(KEY_W))-int(Input.is_physical_key_pressed(KEY_S)))
+		var side := float(int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A)))
+		fp_yaw += (int(Input.is_physical_key_pressed(KEY_RIGHT))-int(Input.is_physical_key_pressed(KEY_LEFT)))*dt*1.8
+		fp_pitch = clampf(fp_pitch+(int(Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_UP)))*dt*100,-100,100)
+		var direction := Vector2(sin(fp_yaw)*forward+cos(fp_yaw)*side,-cos(fp_yaw)*forward+sin(fp_yaw)*side).normalized()
+		fp_position += direction*(290 if Input.is_physical_key_pressed(KEY_SHIFT) else 190)*dt
+		fp_position = fp_position.clamp(Vector2(-190,130),Vector2(190,1300))
+	elif mode == "throw":
+		fp_flight += dt
+		if fp_flight>2.3:
+			mode = "escape_win"
+			hazards.clear()
+			hits = 8
+	queue_redraw()
+	return true
+
+func fp_camera(p: Vector3) -> Vector3:
+	var dx := p.x-fp_position.x
+	var dz := p.z-fp_position.y
+	return Vector3(dx*cos(fp_yaw)+dz*sin(fp_yaw),p.y,dx*sin(fp_yaw)-dz*cos(fp_yaw))
+
+func fp_project(p: Vector3) -> Vector2:
+	return Vector2(480+p.x*470/p.z,300+(100-p.y)*470/p.z+fp_pitch)
+
+func fp_face(points: Array, color: Color) -> void:
+	var input: Array[Vector3] = []
+	var clipped: Array[Vector3] = []
+	for p: Vector3 in points: input.append(fp_camera(p))
+	for i in range(input.size()):
+		var a := input[i]
+		var b := input[(i+1)%input.size()]
+		var inside := a.z>=12
+		var next_inside := b.z>=12
+		if inside: clipped.append(a)
+		if inside!=next_inside:
+			clipped.append(a.lerp(b,(12-a.z)/(b.z-a.z)))
+	if clipped.size()<3: return
+	var screen := PackedVector2Array()
+	for p: Vector3 in clipped: screen.append(fp_project(p))
+	draw_colored_polygon(screen,color)
+
+func fp_block(x: float, z: float, w: float, h: float, d: float) -> void:
+	fp_face([Vector3(x,0,z),Vector3(x+w,0,z),Vector3(x+w,h,z),Vector3(x,h,z)],Color("544460"))
+	fp_face([Vector3(x,0,z+d),Vector3(x+w,0,z+d),Vector3(x+w,h,z+d),Vector3(x,h,z+d)],Color("302a43"))
+	fp_face([Vector3(x,0,z),Vector3(x,0,z+d),Vector3(x,h,z+d),Vector3(x,h,z)],Color("28263d"))
+	fp_face([Vector3(x+w,0,z),Vector3(x+w,0,z+d),Vector3(x+w,h,z+d),Vector3(x+w,h,z)],Color("797086"))
+	fp_face([Vector3(x,h,z),Vector3(x+w,h,z),Vector3(x+w,h,z+d),Vector3(x,h,z+d)],Color("9c7b8e"))
+
+func draw_first_person() -> bool:
+	if mode not in ["fps","throw","escape_win"] and not (mode=="paused" and before_pause in ["fps","throw"]): return false
+	r(0,0,960,600,Color("121725"))
+	var tiles: Array[Dictionary] = []
+	for z in range(0,1500,90):
+		for x in range(-450,450,90):
+			tiles.append({"x":x,"z":z,"dist":Vector2(x,z).distance_to(fp_position)})
+	tiles.sort_custom(func(a: Dictionary,b: Dictionary) -> bool: return a.dist>b.dist)
+	for tile in tiles:
+		var x: float = tile.x
+		var z: float = tile.z
+		fp_face([Vector3(x,0,z),Vector3(x+88,0,z),Vector3(x+88,0,z+88),Vector3(x,0,z+88)],Color("1a2031") if (int(x/90)+int(z/90))%2 else Color("303044"))
+	fp_face([Vector3(-320,0,0),Vector3(320,0,0),Vector3(320,320,0),Vector3(-320,320,0)],Color("2e293f"))
+	fp_face([Vector3(-88,25,1),Vector3(88,25,1),Vector3(88,270,1),Vector3(-88,270,1)],Color("c79691"))
+	for row in range(8):
+		for col in range(6):
+			var x := -82+col*28
+			var y := 34+row*28
+			fp_face([Vector3(x,y,2),Vector3(x+25,y,2),Vector3(x+25,y+25,2),Vector3(x,y+25,2)],Color("d8aa8b") if (row+col)%2 else Color("8f739a"))
+	var pillars: Array[Dictionary] = []
+	for z in range(100,1500,210):
+		for side: int in [-1,1]: pillars.append({"x":side*255-21,"z":z,"dist":Vector2(side*255,z).distance_to(fp_position)})
+	pillars.sort_custom(func(a: Dictionary,b: Dictionary) -> bool: return a.dist>b.dist)
+	for p in pillars:
+		fp_block(p.x-13,p.z-6,68,12,48)
+		fp_block(p.x,p.z,42,240,36)
+		fp_face([Vector3(p.x-9,232,p.z-5),Vector3(p.x+53,232,p.z-5),Vector3(p.x+53,248,p.z-5),Vector3(p.x-9,248,p.z-5)],Color("90738b"))
+	var cam := fp_camera(Vector3(0,sin(minf(1,fp_flight/2.3)*PI)*290 if mode=="throw" else 0,300-fp_flight*800))
+	if cam.z>12 and mode!="escape_win":
+		var screen := fp_project(cam)
+		var scale_factor := minf(5,470/cam.z*0.85)
+		var angle := fp_flight*5 if mode=="throw" else 0.0
+		var origin := screen-(Vector2(480,306)*scale_factor).rotated(angle)
+		draw_set_transform(origin,angle,Vector2.ONE*scale_factor)
+		sans()
+		draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+	if mode=="escape_win":
+		r(130,157,700,290,Color("080d1aee"))
+		label("VOCÊ QUEBROU AS REGRAS.",480,225,30,GOLD,true)
+		label("SANS FOI ARREMESSADO PARA LONGE.",480,280,18,CYAN,true)
+		label("Vitória alternativa · Fora da caixa",480,319,18,WHITE,true)
+		label("ENTER PARA JOGAR DE NOVO",480,398,16,GOLD,true)
+	else:
+		label("FORA DA CAIXA · PRIMEIRA PESSOA",30,44,16,CYAN)
+		label("HP %d / 92" % hp,820,44,16,GOLD)
+		r(479,291,2,18,CYAN)
+		r(471,299,18,2,CYAN)
+		var dist := fp_position.distance_to(Vector2(0,300))
+		label("ESPAÇO / BOTÃO DIREITO: ARREMESSAR SANS" if dist<195 else "APROXIME-SE DO SANS",480,513,18,CYAN,true)
+		for side: int in [-1,1]:
+			var x := 480+side*220
+			r(x-42,565,84,35,Color("553755"))
+			r(x-35,553,70,38,Color("caa594"))
+			r(x-25,545,48,32,Color("e4c2a6"))
+		r(0,558,960,42,Color("080c16dd"))
+		label("WASD: ANDAR · SETAS / ARRASTE: OLHAR · E: VOLTAR · ESC: PAUSA",480,584,13,WHITE,true)
+		if message_time>0: label(message,480,90,16,GOLD,true)
+	if mode=="paused":
+		r(0,0,960,600,Color("060910dd"))
+		label("PAUSADO · ESC PARA CONTINUAR",480,300,26,GOLD,true)
+	return true
