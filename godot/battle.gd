@@ -188,6 +188,7 @@ func say(s: String) -> void:
 	message_time = 2.5
 
 func start() -> void:
+	music_player.pitch_scale = 1.0
 	fp_position = Vector2(0,680)
 	fp_yaw = 0
 	fp_pitch = 0
@@ -221,6 +222,12 @@ func next_wave() -> void:
 	say("gravidade. engraçado, né?" if gravity else "continua tentando.")
 
 func confirm() -> void:
+	if mode.begins_with("dr_"):
+		cyber_confirm()
+		return
+	if mode=="escape_win":
+		start_crossover()
+		return
 	match mode:
 		"title", "dead", "win", "escape_win": start()
 		"paused": toggle_pause()
@@ -254,7 +261,7 @@ func confirm() -> void:
 func toggle_pause() -> void:
 	if mode == "paused":
 		mode = before_pause
-	elif mode in ["attack","menu","aim","fps","throw"]:
+	elif mode in ["attack","menu","aim","fps","throw","explosion","dr_intro","dr_attack","dr_menu"]:
 		before_pause = mode
 		mode = "paused"
 	music_player.stream_paused = mode == "paused"
@@ -264,7 +271,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	match event.keycode:
 		KEY_E: toggle_first_person()
-		KEY_SPACE: toss_sans()
+		KEY_SPACE:
+			if mode=="dr_attack": cyber_shoot()
+			else: toss_sans()
 		KEY_ENTER, KEY_Z: confirm()
 		KEY_ESCAPE: toggle_pause()
 		KEY_X:
@@ -278,8 +287,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
 		KEY_RIGHT, KEY_D:
 			if mode == "menu": selected = (selected+1)%4
+			elif mode=="dr_menu": cyber_selected = (cyber_selected+1)%4
 		KEY_LEFT, KEY_A:
 			if mode == "menu": selected = (selected+3)%4
+			elif mode=="dr_menu": cyber_selected = (cyber_selected+3)%4
 
 func burst(pos: Vector2, color: Color, count: int) -> void:
 	for i in range(count):
@@ -313,6 +324,7 @@ func spawn_hazard() -> void:
 
 func _process(delta: float) -> void:
 	var dt := minf(delta,0.033)
+	if process_crossover(dt): return
 	if process_first_person(dt): return
 	if mode == "paused":
 		queue_redraw()
@@ -397,6 +409,7 @@ func draw_hazards() -> void:
 				if h.timer<1.48: skull(Vector2(254,h.y) if h.horizontal else Vector2(h.x,299),0.8,true)
 
 func _draw() -> void:
+	if draw_crossover(): return
 	if draw_first_person(): return
 	corridor()
 	if mode == "title":
@@ -494,7 +507,7 @@ func _input(event: InputEvent) -> void:
 		toss_sans()
 
 func process_first_person(dt: float) -> bool:
-	if mode not in ["fps","throw","escape_win"]: return false
+	if mode not in ["fps","throw","explosion","escape_win"]: return false
 	clock += dt
 	message_time -= dt
 	if mode == "fps":
@@ -507,7 +520,18 @@ func process_first_person(dt: float) -> bool:
 		fp_position = fp_position.clamp(Vector2(-190,130),Vector2(190,1300))
 	elif mode == "throw":
 		fp_flight += dt
-		if fp_flight>2.3:
+		if fp_flight>=1.2:
+			fp_flight = 1.2
+			mode = "explosion"
+			impact_time = 0
+			var impact := fp_camera(Vector3(0,75,40))
+			burst(fp_project(impact),GOLD,85)
+	elif mode=="explosion":
+		impact_time += dt
+		for p in sparks:
+			p.p += p.v*dt
+			p.life -= dt
+		if impact_time>1.7:
 			mode = "escape_win"
 			hazards.clear()
 			hits = 8
@@ -547,7 +571,7 @@ func fp_block(x: float, z: float, w: float, h: float, d: float) -> void:
 	fp_face([Vector3(x,h,z),Vector3(x+w,h,z),Vector3(x+w,h,z+d),Vector3(x,h,z+d)],Color("9c7b8e"))
 
 func draw_first_person() -> bool:
-	if mode not in ["fps","throw","escape_win"] and not (mode=="paused" and before_pause in ["fps","throw"]): return false
+	if mode not in ["fps","throw","explosion","escape_win"] and not (mode=="paused" and before_pause in ["fps","throw","explosion"]): return false
 	r(0,0,960,600,Color("121725"))
 	var tiles: Array[Dictionary] = []
 	for z in range(0,1500,90):
@@ -573,8 +597,8 @@ func draw_first_person() -> bool:
 		fp_block(p.x-13,p.z-6,68,12,48)
 		fp_block(p.x,p.z,42,240,36)
 		fp_face([Vector3(p.x-9,232,p.z-5),Vector3(p.x+53,232,p.z-5),Vector3(p.x+53,248,p.z-5),Vector3(p.x-9,248,p.z-5)],Color("90738b"))
-	var cam := fp_camera(Vector3(0,sin(minf(1,fp_flight/2.3)*PI)*290 if mode=="throw" else 0,300-fp_flight*800))
-	if cam.z>12 and mode!="escape_win":
+	var cam := fp_camera(Vector3(0,sin(minf(1,fp_flight/1.2)*PI)*180 if mode=="throw" else 0,300-minf(1,fp_flight/1.2)*260))
+	if cam.z>12 and mode not in ["explosion","escape_win"]:
 		var screen := fp_project(cam)
 		var scale_factor := minf(5,470/cam.z*0.85)
 		var angle := fp_flight*5 if mode=="throw" else 0.0
@@ -582,12 +606,19 @@ func draw_first_person() -> bool:
 		draw_set_transform(origin,angle,Vector2.ONE*scale_factor)
 		sans()
 		draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+	if mode=="explosion":
+		var center := fp_project(fp_camera(Vector3(0,75,40)))
+		draw_arc(center,maxf(1,impact_time*150),0,TAU,48,GOLD,5)
+		for p in sparks:
+			if p.life>0: r(p.p.x,p.p.y,5,5,p.c)
+		if impact_time<0.18: r(0,0,960,600,Color(1,0.95,0.8,1-impact_time/0.18))
 	if mode=="escape_win":
+		for i in range(7): draw_arc(Vector2(480,290),180+i*5,0,TAU,64,CYAN if i%2 else Color("ad73e7"),2)
 		r(130,157,700,290,Color("080d1aee"))
 		label("VOCÊ QUEBROU AS REGRAS.",480,225,30,GOLD,true)
-		label("SANS FOI ARREMESSADO PARA LONGE.",480,280,18,CYAN,true)
-		label("Vitória alternativa · Fora da caixa",480,319,18,WHITE,true)
-		label("ENTER PARA JOGAR DE NOVO",480,398,16,GOLD,true)
+		label("SANS EXPLODIU. UMA FENDA SE ABRIU.",480,280,18,CYAN,true)
+		label("UÉ... DELTARUNE NO UNDERTALE?!",480,319,18,WHITE,true)
+		label("ENTER: ATRAVESSAR PARA DELTARUNE",480,398,16,GOLD,true)
 	else:
 		label("FORA DA CAIXA · PRIMEIRA PESSOA",30,44,16,CYAN)
 		label("HP %d / 92" % hp,820,44,16,GOLD)
@@ -603,6 +634,201 @@ func draw_first_person() -> bool:
 		r(0,558,960,42,Color("080c16dd"))
 		label("WASD: ANDAR · SETAS / ARRASTE: OLHAR · E: VOLTAR · ESC: PAUSA",480,584,13,WHITE,true)
 		if message_time>0: label(message,480,90,16,GOLD,true)
+	if mode=="paused":
+		r(0,0,960,600,Color("060910dd"))
+		label("PAUSADO · ESC PARA CONTINUAR",480,300,26,GOLD,true)
+	return true
+
+
+# Chapter 2: a deliberately impossible DELTARUNE crossover fan encounter.
+var neo_hp := 180
+var cyber_tp := 0
+var cyber_wave := 0
+var cyber_time := 0.0
+var cyber_age := 0.0
+var cyber_spawn := 0
+var cyber_cool := 0.0
+var cyber_selected := 0
+var cyber_bullets: Array[Dictionary] = []
+var cyber_shots: Array[Vector2] = []
+var impact_time := 0.0
+
+func start_crossover() -> void:
+	mode = "dr_intro"
+	hp = 120
+	pies = 3
+	neo_hp = 180
+	cyber_tp = 0
+	cyber_wave = 0
+	cyber_time = 0
+	cyber_age = 0
+	cyber_bullets.clear()
+	cyber_shots.clear()
+	music_player.pitch_scale = 1.12
+
+func cyber_next_wave() -> void:
+	mode = "dr_attack"
+	cyber_age = 0
+	cyber_spawn = 0
+	cyber_wave += 1
+	cyber_bullets.clear()
+	cyber_shots.clear()
+	cyber_cool = 0
+	soul = Vector2(480,440)
+	immunity = 1
+
+func cyber_confirm() -> void:
+	match mode:
+		"dr_intro": cyber_next_wave()
+		"dr_dead": start_crossover()
+		"dr_win": start()
+		"dr_menu":
+			match cyber_selected:
+				0: neo_hp = maxi(0,neo_hp-25)
+				1:
+					neo_hp = maxi(0,neo_hp-12)
+					cyber_tp = mini(100,cyber_tp+25)
+				2:
+					if pies>0:
+						hp = mini(120,hp+40)
+						pies -= 1
+				3:
+					if neo_hp<=35: neo_hp = 0
+			if neo_hp==0: mode = "dr_win"
+			else: cyber_next_wave()
+
+func cyber_shoot() -> void:
+	if mode=="dr_attack" and cyber_cool<=0:
+		cyber_shots.append(soul-Vector2(0,10))
+		cyber_cool = 0.18
+
+func process_crossover(dt: float) -> bool:
+	if not mode.begins_with("dr_"): return false
+	clock += dt
+	cyber_time += dt
+	if mode!="dr_attack":
+		queue_redraw()
+		return true
+	cyber_age += dt
+	immunity = maxf(0,immunity-dt)
+	cyber_cool = maxf(0,cyber_cool-dt)
+	var dx := int(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT))-int(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT))
+	var dy := int(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))-int(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP))
+	soul = (soul+Vector2(dx,dy).normalized()*210*dt).clamp(Vector2(249,299),Vector2(711,501))
+	if Input.is_physical_key_pressed(KEY_SPACE) or Input.is_physical_key_pressed(KEY_Z): cyber_shoot()
+	if cyber_age>1 and cyber_age>(cyber_spawn+1)*0.58:
+		var n := cyber_spawn
+		cyber_spawn += 1
+		match cyber_wave%3:
+			0:
+				var gap := 290+n*71%340
+				for x in range(255,710,38):
+					if absf(x-gap)>47: cyber_bullets.append({"p":Vector2(x,283),"v":Vector2(0,120+cyber_wave*4),"kind":0,"graze":false})
+			1:
+				for i in range(-2,3):
+					var angle := (soul-Vector2(480,240)).angle()+i*0.24
+					cyber_bullets.append({"p":Vector2(480,280),"v":Vector2.from_angle(angle)*145,"kind":1,"graze":false})
+			2:
+				for i in range(5): cyber_bullets.append({"p":Vector2(230 if n%2 else 730,310+i*41),"v":Vector2(145 if n%2 else -145,sin(n)*28),"kind":2,"graze":false})
+	var enemy_x := 480+sin(cyber_time*1.5)*92
+	for i in range(cyber_shots.size()):
+		cyber_shots[i].y -= 520*dt
+		var shot := cyber_shots[i]
+		if shot.y<242 and shot.y>112 and absf(shot.x-enemy_x)<56:
+			neo_hp = maxi(0,neo_hp-(18 if cyber_tp>=100 else 4))
+			if cyber_tp>=100: cyber_tp = 0
+			cyber_shots[i].y = -100
+	cyber_shots = cyber_shots.filter(func(p: Vector2) -> bool: return p.y>-20)
+	for b in cyber_bullets:
+		b.p += b.v*dt
+		var dist: float = b.p.distance_to(soul)
+		if dist<14 and immunity<=0 and not practice:
+			hp = maxi(0,hp-8)
+			immunity = 0.7
+			if hp==0: mode = "dr_dead"
+		elif dist<34 and not b.graze:
+			b.graze = true
+			cyber_tp = mini(100,cyber_tp+6)
+	cyber_bullets = cyber_bullets.filter(func(b: Dictionary) -> bool: return b.p.x>220 and b.p.x<740 and b.p.y<530 and b.p.y>275)
+	if neo_hp==0: mode = "dr_win"
+	elif mode=="dr_attack" and cyber_age>10:
+		mode = "dr_menu"
+		cyber_selected = 0
+		cyber_bullets.clear()
+	queue_redraw()
+	return true
+
+func draw_neo(pos: Vector2) -> void:
+	draw_set_transform(pos+Vector2(0,sin(cyber_time*3)*4),0,Vector2.ONE*2.1)
+	for side: int in [-1,1]:
+		draw_line(Vector2(side*35,-85),Vector2(side*22,-10),Color("69e5bf99"))
+		draw_colored_polygon(PackedVector2Array([Vector2(side*17,-9),Vector2(side*58,-29),Vector2(side*48,9),Vector2(side*21,19)]),Color("b9b0eb"))
+		draw_colored_polygon(PackedVector2Array([Vector2(side*21,-4),Vector2(side*48,-19),Vector2(side*42,5),Vector2(side*24,13)]),Color("62528e"))
+		r(-41 if side<0 else 22,14,18,8,Color("dcd4f2"))
+		r(-43 if side<0 else 34,20,10,18,Color("8d83bf"))
+		r(-14 if side<0 else 4,35,10,28,Color("edb9d9"))
+		r(-20 if side<0 else 5,60,18,7,Color("ece9f5"))
+	r(-19,-8,38,43,Color("c98abd"))
+	r(-11,2,22,24,Color("efc2da"))
+	r(-7,8,14,11,Color("f4e9ac"))
+	r(-5,10,10,7,Color("50e9c2"))
+	r(-14,-38,28,30,Color("f3eadc"))
+	r(-13,-29,12,8,Color("f5ce49"))
+	r(2,-29,12,8,Color("f38cc0"))
+	draw_colored_polygon(PackedVector2Array([Vector2(10,-21),Vector2(25,-16),Vector2(11,-13)]),Color("eee8de"))
+	r(-11,-13,23,4,Color("1c1630"))
+	r(-13,-40,26,5,Color("19182c"))
+	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+
+func draw_crossover() -> bool:
+	var phase := before_pause if mode=="paused" else mode
+	if not phase.begins_with("dr_"): return false
+	r(0,0,960,600,Color("090b1b"))
+	for i in range(22):
+		var x := i*49
+		r(x,45+i*37%85,32,170,Color("151d33"))
+		for row in range(8): r(x+7,65+i*37%85+row*16,4,6,Color("425473") if (i+row)%3 else Color("b66b9b"))
+	for i in range(10):
+		var x := fposmod(i*151-cyber_time*13,1100)
+		r(x,90+i*47%120,68,23,Color("293043"))
+		label("[ DEAL ]" if i%2 else "1997",x+34,106+i*47%120,10,GOLD,true)
+	for i in range(7): r(0,270+i*i*5,960,1,Color("63477855"))
+	for x in range(-900,1900,140): draw_line(Vector2(480+(x-480)*0.14,270),Vector2(x,600),Color("63477855"))
+	draw_neo(Vector2(480+sin(cyber_time*1.5)*92,147))
+	label("SPAMTON NEO",36,35,16,Color("f0a2d1"))
+	label("UM [[GRANDE NEGÓCIO]] ENTRE UNIVERSOS",635,35,11,CYAN)
+	r(376,264,208,5,Color("482945"))
+	r(376,264,208*float(neo_hp)/180,5,Color("e7a3d1"))
+	r(236,286,488,228,Color("be9ed7"))
+	r(240,290,480,220,Color("050a16"))
+	if phase=="dr_attack":
+		for b in cyber_bullets:
+			if b.p.x<245 or b.p.x>715 or b.p.y<295 or b.p.y>505: continue
+			if b.kind==2: r(b.p.x-10,b.p.y-7,20,14,Color("8ce4ca"))
+			else: draw_colored_polygon(PackedVector2Array([b.p+Vector2(0,-8),b.p+Vector2(7,0),b.p+Vector2(0,8),b.p+Vector2(-7,0)]),Color("eda8d4") if b.kind else Color("8ce4ca"))
+		for shot in cyber_shots: r(shot.x-2,shot.y-9,4,15,GOLD)
+		if immunity<=0 or int(clock*16)%2==0: heart(soul,Color("ffe55d"),2.3)
+		label("SEGURE Z / ESPAÇO PARA ATIRAR",480,535,13,GOLD,true)
+	elif phase=="dr_menu":
+		label("* VOCÊ QUER SER UM [[BIG SHOT]]?",480,344,20,Color("e8d8f5"),true)
+		label("* Corte os fios. Ou faça um negócio.",480,380,15,Color("a99ec4"),true)
+		var options := ["LUTAR","AGIR","ITEM","POUPAR"]
+		for i in range(4):
+			var x := 255+i*115
+			r(x,431,106,43,Color("e7a3d1") if i==cyber_selected else Color("5d5577"))
+			r(x+2,433,102,39,Color("101426"))
+			label(options[i],x+53,458,16,GOLD if i==cyber_selected else WHITE,true)
+	else:
+		label("DELTARUNE NO UNDERTALE?!" if phase=="dr_intro" else ("VOCÊ É UM [[BIG SHOT]]!" if phase=="dr_win" else "CONEXÃO PERDIDA."),480,345,26,Color("f0b0db"),true)
+		label("NÃO FAZ SENTIDO. MAS VAI TER." if phase=="dr_intro" else "Mantenha sua determinação entre universos.",480,389,16,Color("a8bace"),true)
+		label("ENTER: ENFRENTAR SPAMTON NEO" if phase=="dr_intro" else "ENTER: JOGAR NOVAMENTE",480,458,16,GOLD,true)
+	label("KRIS",45,560,20)
+	label("HP %d / 120" % hp,45,584,16,CYAN)
+	label("TP %d%%" % cyber_tp,800,560,18,GOLD)
+	label("TORTAS ×%d · TURNO %d" % [pies,cyber_wave],760,584,12)
+	r(280,558,390,6,Color("382344"))
+	r(280,558,390*float(neo_hp)/180,6,Color("eda4d6"))
+	label("NEO · FIOS RESTANTES",480,585,12,Color("b8a2ce"),true)
 	if mode=="paused":
 		r(0,0,960,600,Color("060910dd"))
 		label("PAUSADO · ESC PARA CONTINUAR",480,300,26,GOLD,true)

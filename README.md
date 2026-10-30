@@ -42,11 +42,28 @@ Durante uma onda, no menu ou na barra de ataque, aperte **E** (ou clique em **SA
 - **Setas** ou **arrastar com botão esquerdo**: olhar.
 - Aproxime-se do Sans a menos de 2 metros e olhe para ele.
 - **Espaço** ou **clique na web** / **botão direito no Godot**: arremessar Sans.
-- Sans voa, gira e se afasta pelo corredor; após a animação, aparece uma **vitória alternativa**. Enter reinicia.
+- Sans voa e gira até o fim do corredor. No impacto, **explode em partículas**, com clarão e onda de choque, e abre uma **fenda para Deltarune**. Enter atravessa para o segundo encontro.
 - **E** retorna à batalha antes do arremesso, preservando vida, itens, onda e obstáculos, com um segundo de invulnerabilidade.
 - **Esc** pausa também a primeira pessoa e o arremesso. O ataque remoto é bloqueado: é necessário chegar perto e mirar no Sans.
 
 A câmera usa a mesma projeção 2.5D, agora com posição, rotação, altura e recorte de geometria no plano próximo. Não precisa de ponteiro capturado.
+
+## Crossover: DELTARUNE no UNDERTALE?!
+
+Sim. É uma sequência alternativa de fã, não parte do cânone de nenhum dos jogos.
+
+Após a explosão, **Enter ou clique** entra na introdução da luta com **Spamton NEO**. Confirme novamente para começar:
+
+- **WASD / setas**: mover a alma amarela na nova arena.
+- **Segure Z ou Espaço**: atirar para cima. Acerte o corpo do NEO para romper seus fios (180 de resistência).
+- Três padrões alternados: leques direcionados, anúncios laterais e chuva de diamantes com abertura.
+- Desviar perto dos projéteis acumula **TP**. Com 100%, o próximo tiro é fortalecido.
+- Após 10 segundos, o menu permite **LUTAR** (25 de dano), **AGIR** (12 de dano e +25 TP), **ITEM** (40 HP, 3 usos), ou **POUPAR** (vence quando restam no máximo 35 pontos).
+- Kris começa com 120 HP; projéteis causam 8 de dano com invulnerabilidade breve. O modo treino também vale aqui.
+- Derrota permite tentar novamente o crossover, sem refazer o Sans. Vencer o NEO permite reiniciar desde o primeiro encontro.
+- A prévia tem um novo motivo chiptune; no Godot, a trilha muda de andamento/tom.
+
+O cenário, sprite de fã, projéteis e interface são procedurais e originais; esta é uma luta compacta inspirada em Deltarune, não uma reprodução completa da batalha oficial.
 
 ## O encontro
 
@@ -70,7 +87,7 @@ A edição 2.5D combina **geometria projetada em perspectiva** com sprites em pi
 
 A arte é desenhada com retângulos, sem suavização, com corredor, pilares, janelas, partículas e Sans animado. A música **Determination** é uma composição original sintetizada, não MEGALOVANIA. `tools/compose.py` recria o WAV sem dependências Python. A web sintetiza uma versão do mesmo motivo em tempo real.
 
-UNDERTALE e Sans pertencem a **Toby Fox**. Fan game não oficial, sem afiliação. Não são distribuídos sprites, áudio ou arquivos extraídos do jogo original.
+UNDERTALE, DELTARUNE, Sans e Spamton pertencem a **Toby Fox**. Fan game não oficial, sem afiliação. Não são distribuídos sprites, áudio ou arquivos extraídos do jogo original.
 
 ## Validação
 
@@ -80,6 +97,6 @@ node tools/test-game.cjs
 python tools/compose.py  # opcional: recriar trilha
 ```
 
-O teste da máquina de estados cobre 8 variantes de onda, persistência de obstáculos, salto, itens, pausa, timing, vitória e derrota/reinício. GitHub Actions também importa e executa a cena no Godot 4.5.1 headless.
+O teste da máquina de estados cobre 8 variantes de onda, persistência de obstáculos, salto, itens, pausa, timing, vitória e derrota/reinício. Também cobre impacto/explosão, portal, tiros, cura, derrota e vitória do crossover. GitHub Actions também importa e executa a cena no Godot 4.5.1 headless.
 
 Neste ambiente local o executável Godot não está instalado e seu download foi bloqueado pela rede. O GDScript foi validado sintaticamente com `gdparse`; a validação de execução nativa fica a cargo do workflow Godot. A prévia está servida separadamente.

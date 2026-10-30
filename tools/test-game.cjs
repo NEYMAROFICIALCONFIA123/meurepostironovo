@@ -13,6 +13,7 @@ const sandbox = {console, Math, Set, document:{querySelector:element,addEventLis
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync('web/scene25d.js','utf8'),sandbox);
 vm.runInContext(fs.readFileSync('web/firstperson.js','utf8'),sandbox);
+vm.runInContext(fs.readFileSync('web/crossover.js','utf8'),sandbox);
 vm.runInContext(fs.readFileSync('web/game.js','utf8'),sandbox);
 const run = s => vm.runInContext(s,sandbox);
 run('audio={resume:()=>{}};muted=true;start(); practice=true;');
@@ -47,6 +48,12 @@ run('throwSans()');assert.equal(run('state'),'fps','Cannot throw from far away')
 run('toggleFP()');assert.equal(run('state'),'attack');assert.equal(run('age'),4,'Escape must freeze battle time');
 run('toggleFP();fp.z=440;fp.x=0;fp.yaw=Math.PI;throwSans()');assert.equal(run('state'),'fps','Must aim at Sans');
 run('fp.yaw=0;throwSans()');assert.equal(run('state'),'throw');
-run('for(let i=0;i<130;i++){update(.02);draw()}');assert.equal(run('state'),'escape_win');
-run('confirm()');assert.equal(run('state'),'attack');assert.equal(run('fp.won'),false);
+run('for(let i=0;i<160;i++){update(.02);draw()}');assert.equal(run('state'),'escape_win');
+run('confirm()');assert.equal(run('state'),'dr_intro');run('confirm()');assert.equal(run('state'),'dr_attack');run('start()');assert.equal(run('state'),'attack');assert.equal(run('fp.won'),false);
 console.log('PASS: first-person escape/return, movement, distance/aim gates, toss animation, alternate victory and reset.');
+
+run('startCrossover();confirm();practice=true;keys.add(" ");for(let i=0;i<200;i++)update(.02);keys.clear();');assert.ok(run('dr.enemy')<180,'Yellow shots must damage NEO');
+run('state="dr_attack";dr.hp=5;dr.inv=0;practice=false;drDamage()');assert.equal(run('state'),'dr_dead');run('confirm()');assert.equal(run('dr.hp'),120);
+run('confirm();state="dr_menu";dr.sel=2;dr.hp=40;drConfirm()');assert.equal(run('dr.hp'),80);
+run('state="dr_menu";dr.sel=0;dr.enemy=20;drConfirm()');assert.equal(run('state'),'dr_win');run('confirm()');assert.equal(run('dr.active'),false);
+console.log('PASS: impact explosion, portal, crossover intro, shooting, damage/death/retry, healing, NEO victory and full restart.');
